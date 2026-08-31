@@ -688,3 +688,108 @@ select.input { cursor: pointer; }
 }
 .filter-dot-btn:hover { opacity: 1; background: var(--panel-2); }
 .filter-dot-btn.active { opacity: 1; color: #a5b4fc; }
+
+/* ============================================================ animated login */
+.auth-brand { position: relative; }
+
+/* aurora blobs behind the 3D scene */
+.aurora { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.aurora span { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.4; }
+.aurora span:nth-child(1) { width: 380px; height: 380px; background: #6366f1; top: -80px; left: -60px; animation: aurora-a 18s ease-in-out infinite alternate; }
+.aurora span:nth-child(2) { width: 320px; height: 320px; background: #8b5cf6; bottom: -100px; right: -40px; animation: aurora-b 22s ease-in-out infinite alternate; }
+.aurora span:nth-child(3) { width: 240px; height: 240px; background: #0ea5e9; top: 45%; left: 55%; animation: aurora-c 26s ease-in-out infinite alternate; }
+@keyframes aurora-a { to { transform: translate(70px, 90px) scale(1.2); } }
+@keyframes aurora-b { to { transform: translate(-80px, -60px) scale(1.15); } }
+@keyframes aurora-c { to { transform: translate(-100px, 50px) scale(0.85); } }
+
+/* staggered entrances */
+.anim-in { animation: fadeup 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: var(--d, 0s); }
+
+/* gradient-sweep title */
+.animated-title {
+  background: linear-gradient(90deg, #e8ebf4 0%, #a5b4fc 30%, #c4b5fd 50%, #a5b4fc 70%, #e8ebf4 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: title-sweep 5s linear infinite, fadeup 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 0s, var(--d, 0s);
+  font-size: 2.7rem;
+}
+@keyframes title-sweep { to { background-position: -250% 0; } }
+
+.feature-icon { display: inline-block; animation: bob 3.2s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-3px); } }
+
+/* floating particles on the form side */
+.auth-form-side { position: relative; overflow: hidden; }
+.auth-particles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.auth-particles span { position: absolute; bottom: -12px; border-radius: 50%; opacity: 0; animation: float-p linear infinite; }
+.auth-particles .p1 { width: 7px; height: 7px; background: #6366f1; left: 12%; animation-duration: 13s; }
+.auth-particles .p2 { width: 5px; height: 5px; background: #8b5cf6; left: 38%; animation-duration: 17s; animation-delay: 2s; }
+.auth-particles .p3 { width: 9px; height: 9px; background: #38bdf8; left: 68%; animation-duration: 15s; animation-delay: 4s; }
+.auth-particles .p4 { width: 5px; height: 5px; background: #10b981; left: 86%; animation-duration: 19s; animation-delay: 1s; }
+@keyframes float-p {
+  0%   { transform: translateY(0) scale(0.6); opacity: 0; }
+  12%  { opacity: 0.55; }
+  88%  { opacity: 0.35; }
+  100% { transform: translateY(-105vh) scale(1.15); opacity: 0; }
+}
+
+/* card entrance + success exit */
+.auth-card { position: relative; animation: card-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: 0.1s; }
+@keyframes card-in {
+  from { opacity: 0; transform: perspective(900px) rotateX(7deg) translateY(30px) scale(0.95); }
+}
+.auth-success { animation: card-out 0.5s ease forwards; }
+@keyframes card-out { to { opacity: 0; transform: scale(0.93) translateY(-14px); } }
+.auth-check {
+  position: absolute; inset: 0; display: grid; place-items: center; z-index: 5;
+  font-size: 76px; color: #34d399; background: #0e1220f2; border-radius: 18px;
+  animation: check-pop 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) backwards;
+}
+@keyframes check-pop { from { opacity: 0; transform: scale(0.3); } }
+
+/* sliding tab pill */
+.auth-tabs { position: relative; }
+.tab-pill {
+  position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 6px);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-radius: 8px;
+  transition: transform 0.3s cubic-bezier(0.4, 0.2, 0.2, 1); z-index: 0;
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+.tab-pill.right { transform: translateX(calc(100% + 4px)); }
+.auth-tabs button { position: relative; z-index: 1; }
+.auth-tabs button.active { background: none; color: #fff; }
+
+/* collapsible full-name field (register mode) */
+.auth-fields { display: flex; flex-direction: column; gap: 14px; }
+.auth-fields .field:first-child {
+  max-height: 0; opacity: 0; overflow: hidden; margin-bottom: -14px;
+  transition: max-height 0.35s ease, opacity 0.3s ease, margin-bottom 0.35s ease;
+}
+.auth-fields.with-name .field:first-child { max-height: 92px; opacity: 1; margin-bottom: 0; }
+
+/* shine sweep on the primary button */
+.btn-shine { position: relative; overflow: hidden; }
+.btn-shine::after {
+  content: ''; position: absolute; top: 0; left: -80%; width: 50%; height: 100%;
+  background: linear-gradient(100deg, transparent, #ffffff59, transparent);
+  transform: skewX(-20deg); transition: left 0.55s ease;
+}
+.btn-shine:hover::after { left: 135%; }
+
+/* spinner + error shake + demo pulse */
+.spinner {
+  width: 14px; height: 14px; border: 2px solid #ffffff55; border-top-color: #fff;
+  border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.auth-error { animation: shake 0.42s ease; }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
+}
+.pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
+@keyframes pulse-soft { 50% { box-shadow: 0 0 0 4px var(--accent-soft); } }
