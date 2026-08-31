@@ -2,6 +2,7 @@ import React, { Suspense, useState } from 'react';
 import { api, setToken } from '../api.js';
 import BrandCube from './BrandCube.jsx';
 import ErrorBoundary from './ErrorBoundary.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 import { celebrate } from '../confetti.js';
 
 // three.js is heavy — lazy-load the 3D scene only on the auth screen.
@@ -17,7 +18,7 @@ const FEATURES = [
   { icon: '✦', text: <>Personalised <strong>recommendations, plans & grades</strong> for every teammate</> },
 ];
 
-export default function AuthScreen({ onAuth }) {
+export default function AuthScreen({ onAuth, theme, onToggleTheme }) {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ username: '', password: '', full_name: '' });
   const [error, setError] = useState(null);
@@ -83,6 +84,9 @@ export default function AuthScreen({ onAuth }) {
       <div className="auth-form-side">
         <div className="auth-particles" aria-hidden="true">
           <span className="p1" /><span className="p2" /><span className="p3" /><span className="p4" />
+        </div>
+        <div className="auth-theme-corner">
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
 
         <form className={`auth-card anim-card ${success ? 'auth-success' : ''}`} onSubmit={submit}>

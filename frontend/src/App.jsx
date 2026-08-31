@@ -16,8 +16,26 @@ import Evaluation from './components/Evaluation.jsx';
 import Team from './components/Team.jsx';
 import ProjectHub from './components/ProjectHub.jsx';
 
+const initialTheme = () => {
+  try {
+    const t = localStorage.getItem('taskie_theme');
+    if (t === 'light' || t === 'dark') return t;
+  } catch { /* ignore */ }
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+};
+
 export default function App() {
   const [me, setMe] = useState(null);
+  const [theme, setTheme] = useState(initialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem('taskie_theme', theme); } catch { /* ignore */ }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => (t === 'light' ? 'dark' : 'light'));
+  }, []);
   const [booting, setBooting] = useState(!!localStorage.getItem('taskie_token'));
   const [users, setUsers] = useState([]);
 
@@ -78,7 +96,8 @@ export default function App() {
     );
   }
   if (!me) {
-    return <AuthScreen onAuth={(u) => { setMe(u); setView('dashboard'); }} />;
+    return <AuthScreen onAuth={(u) => { setMe(u); setView('dashboard'); }}
+                       theme={theme} onToggleTheme={toggleTheme} />;
   }
 
   const filtered = tasks.filter((t) => {
@@ -122,7 +141,7 @@ export default function App() {
                hubProjectId={hubProject?.id}
                taskCount={tasks.filter((t) => t.status !== 'done').length} />
       <div className="main-wrap">
-        <Topbar me={me} onLogout={logout} />
+        <Topbar me={me} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} />
         <main className="main">
           <div className="view-enter" key={view === 'project' ? `project-${hubProject?.id ?? 0}` : view}>
             {views[view]}

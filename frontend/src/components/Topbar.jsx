@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 
 function greeting() {
   const h = new Date().getHours();
@@ -8,7 +9,7 @@ function greeting() {
   return 'Good evening';
 }
 
-export default function Topbar({ me, onLogout }) {
+export default function Topbar({ me, onLogout, theme, onToggleTheme }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -28,7 +29,9 @@ export default function Topbar({ me, onLogout }) {
         <div className="topbar-date">{today}</div>
       </div>
 
-      <div className="user-menu" ref={ref}>
+      <div className="topbar-right">
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        <div className="user-menu" ref={ref}>
         <button className="user-chip" onClick={() => setOpen((o) => !o)}>
           <Avatar user={me} size={30} />
           <span className="user-chip-name">{me.full_name || me.username}</span>
@@ -48,6 +51,7 @@ export default function Topbar({ me, onLogout }) {
             <button className="user-dropdown-item danger" onClick={onLogout}>⏻ Sign out</button>
           </div>
         )}
+        </div>
       </div>
     </header>
   );
