@@ -123,7 +123,11 @@ export default function App() {
                taskCount={tasks.filter((t) => t.status !== 'done').length} />
       <div className="main-wrap">
         <Topbar me={me} onLogout={logout} />
-        <main className="main">{views[view]}</main>
+        <main className="main">
+          <div className="view-enter" key={view === 'project' ? `project-${hubProject?.id ?? 0}` : view}>
+            {views[view]}
+          </div>
+        </main>
       </div>
 
       {modalTask && (

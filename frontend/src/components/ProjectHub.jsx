@@ -59,8 +59,8 @@ function FilesTab({ project, onPreview, notify }) {
       {loading && <div className="skeleton skeleton-rec" style={{ marginTop: 14 }} />}
 
       <ul className="file-list" style={{ marginTop: 14 }}>
-        {files.map((f) => (
-          <li key={f.id}>
+        {files.map((f, i) => (
+          <li key={f.id} style={{ '--i': i % 10 }}>
             <button className="file-open" onClick={() => onPreview(f.id)} title="Open preview">
               <span className="file-ext">{(f.extension || '').replace('.', '').toUpperCase() || 'FILE'}</span>
               <span className="file-name">

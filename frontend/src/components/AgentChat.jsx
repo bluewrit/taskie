@@ -102,7 +102,7 @@ export default function AgentChat({ onTasksChanged }) {
             onKeyDown={(e) => e.key === 'Enter' && send()}
             disabled={busy}
           />
-          <button className="btn btn-primary" onClick={() => send()} disabled={busy}>Send</button>
+          <button className="btn btn-primary btn-shine" onClick={() => send()} disabled={busy}>Send</button>
         </div>
         <div className="suggestions">
           {SUGGESTIONS.map((s) => (

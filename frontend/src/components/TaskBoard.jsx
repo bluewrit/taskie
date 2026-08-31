@@ -5,11 +5,12 @@ import { celebrate } from '../confetti.js';
 
 const COLUMNS = ['todo', 'in_progress', 'blocked', 'done'];
 
-function TaskCard({ task, onOpen, onDragStart }) {
+function TaskCard({ task, onOpen, onDragStart, index = 0 }) {
   const today = new Date().toISOString().slice(0, 10);
   const overdue = task.due_date && task.due_date < today && task.status !== 'done';
   return (
-    <div className={`card card-${task.priority}`} draggable onDragStart={(e) => onDragStart(e, task)} onClick={() => onOpen(task)}>
+    <div className={`card card-${task.priority}`} style={{ '--i': index }}
+         draggable onDragStart={(e) => onDragStart(e, task)} onClick={() => onOpen(task)}>
       <div className="card-top">
         <span className={`pill pill-${task.priority}`}>{task.priority}</span>
         {task.files?.length > 0 && <span className="clip" title={`${task.files.length} file(s)`}>📎{task.files.length}</span>}
@@ -73,8 +74,8 @@ export default function TaskBoard({ tasks, onChanged, onOpenTask, onNew, notify 
                 <span className="count">{items.length}</span>
               </div>
               <div className="column-body">
-                {items.map((t) => (
-                  <TaskCard key={t.id} task={t} onOpen={onOpenTask}
+                {items.map((t, i) => (
+                  <TaskCard key={t.id} task={t} index={i} onOpen={onOpenTask}
                             onDragStart={(e, task) => e.dataTransfer.setData('text/task-id', String(task.id))} />
                 ))}
                 {items.length === 0 && <div className="empty-col">Drop tasks here</div>}

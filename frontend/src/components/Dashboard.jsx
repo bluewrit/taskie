@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { api, fmtDate } from '../api.js';
 import Avatar from './Avatar.jsx';
+import CountUp from './CountUp.jsx';
 import Tilt from './Tilt.jsx';
 
 function Sparkbars({ data }) {
   const max = Math.max(1, ...data.map((d) => d.completed));
   return (
     <div className="sparkbars" title="Completed per day (last 14 days)">
-      {data.map((d) => (
-        <div key={d.date} className="sparkbar-col">
+      {data.map((d, i) => (
+        <div key={d.date} className="sparkbar-col" style={{ '--i': i }}>
           <div className="sparkbar" style={{ height: `${(d.completed / max) * 100}%` }} />
         </div>
       ))}
@@ -66,7 +67,7 @@ export default function Dashboard({ tasks, projects, users, me, onOpenTask, onNa
       <div className="stat-grid">
         {stats.map((s) => (
           <Tilt key={s.label} className={`stat-card ${s.cls}`} max={9}>
-            <div className="stat-value depth-1">{s.value}</div>
+            <div className="stat-value depth-1"><CountUp to={s.value} /></div>
             <div className="stat-label depth-1">{s.label}</div>
           </Tilt>
         ))}
