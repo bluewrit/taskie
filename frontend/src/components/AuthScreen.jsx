@@ -1,9 +1,14 @@
 import React, { Suspense, useState } from 'react';
 import { api, setToken } from '../api.js';
 import BrandCube from './BrandCube.jsx';
+import ErrorBoundary from './ErrorBoundary.jsx';
 
-// three.js is heavy — lazy-load the 3D scene only on the auth screen
-const AuthScene = React.lazy(() => import('./AuthScene.jsx'));
+// three.js is heavy — lazy-load the 3D scene only on the auth screen.
+// Any failure (chunk 404/504, no WebGL, GPU blocklist) degrades to nothing:
+// the login form must never be taken down by decoration.
+const AuthScene = React.lazy(() =>
+  import('./AuthScene.jsx').catch(() => ({ default: () => null }))
+);
 
 export default function AuthScreen({ onAuth }) {
   const [mode, setMode] = useState('login');
@@ -37,7 +42,9 @@ export default function AuthScreen({ onAuth }) {
     <div className="auth">
       <div className="auth-brand">
         <div className="auth-canvas">
-          <Suspense fallback={null}><AuthScene /></Suspense>
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}><AuthScene /></Suspense>
+          </ErrorBoundary>
         </div>
         <div className="auth-brand-content">
           <BrandCube size={52} />
