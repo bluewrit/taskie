@@ -34,7 +34,16 @@ export default function Evaluation({ me }) {
     api.agentEvaluation(scope).then(setEv).catch(() => {});
   }, [scope]);
 
-  if (!ev) return <div className="view"><p className="muted">Crunching numbers…</p></div>;
+  if (!ev) {
+    return (
+      <div className="view">
+        <div className="stat-grid">
+          {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="skeleton skeleton-stat" />)}
+        </div>
+        <div className="skeleton skeleton-chart" />
+      </div>
+    );
+  }
   const m = ev.metrics;
 
   return (
@@ -48,8 +57,13 @@ export default function Evaluation({ me }) {
           <button className={scope === 'mine' ? 'active' : ''} onClick={() => setScope('mine')}>Me</button>
           <button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>Whole team</button>
         </div>
-        <div className="grade-big">
-          <span className={`grade-letter grade-${ev.grade}`}>{ev.grade}</span>
+        <div className="grade-big" title="Hover the badge to flip">
+          <span className="flip-scene flip-scene-lg">
+            <span className="flip-card flip-card-lg">
+              <span className={`flip-face grade-letter grade-${ev.grade}`}>{ev.grade}</span>
+              <span className={`flip-face flip-back grade-letter grade-${ev.grade}`}>{ev.overall_score}</span>
+            </span>
+          </span>
           <div>
             <div><strong>{ev.overall_score}/100</strong> overall</div>
             <div className="muted small">backlog health {ev.backlog_health}/100</div>

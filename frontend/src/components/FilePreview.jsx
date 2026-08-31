@@ -22,8 +22,15 @@ export default function FilePreview({ fileId, onClose }) {
 
   useEffect(() => {
     setData(null);
+    setError(null);
     api.previewFile(fileId).then(setData).catch((e) => setError(e.message));
   }, [fileId]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

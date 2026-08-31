@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, fmtDate } from '../api.js';
 import Avatar from './Avatar.jsx';
+import Tilt from './Tilt.jsx';
 
 function Sparkbars({ data }) {
   const max = Math.max(1, ...data.map((d) => d.completed));
@@ -50,7 +51,13 @@ export default function Dashboard({ tasks, projects, users, me, onOpenTask, onNa
           <p className="muted">Personalised by your agent: what to do, when, and how you're doing.</p>
         </div>
         {evalData && (
-          <div className="grade-chip" title={`Your overall score ${evalData.overall_score}/100`}>
+          <div className="grade-chip flip-chip" title={`Your overall score ${evalData.overall_score}/100`}>
+            <span className="flip-scene">
+              <span className="flip-card">
+                <span className="flip-face grade-chip-face">{evalData.grade}</span>
+                <span className="flip-face flip-back grade-chip-face">{Math.round(evalData.overall_score)}</span>
+              </span>
+            </span>
             Your grade <strong>{evalData.grade}</strong>
           </div>
         )}
@@ -58,10 +65,10 @@ export default function Dashboard({ tasks, projects, users, me, onOpenTask, onNa
 
       <div className="stat-grid">
         {stats.map((s) => (
-          <div key={s.label} className={`stat-card ${s.cls}`}>
-            <div className="stat-value">{s.value}</div>
-            <div className="stat-label">{s.label}</div>
-          </div>
+          <Tilt key={s.label} className={`stat-card ${s.cls}`} max={9}>
+            <div className="stat-value depth-1">{s.value}</div>
+            <div className="stat-label depth-1">{s.label}</div>
+          </Tilt>
         ))}
       </div>
 
@@ -99,7 +106,9 @@ export default function Dashboard({ tasks, projects, users, me, onOpenTask, onNa
 
         <section className="panel">
           <h3>Your throughput <span className="muted">(14 days)</span></h3>
-          {evalData ? <Sparkbars data={evalData.throughput} /> : <p className="muted">Loading…</p>}
+          {evalData ? <Sparkbars data={evalData.throughput} /> : (
+            <div className="skeleton skeleton-chart" />
+          )}
           <div className="panel-foot">
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('planner')}>Plan my week →</button>
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('evaluation')}>Full evaluation →</button>

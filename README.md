@@ -6,6 +6,14 @@ A full-stack task management system with **file upload & preview for every file 
 
 ## Features
 
+### 🎨 UI / UX
+- **3D animated sign-in hero** — react-three-fiber scene (floating distorted torus knot,
+  orbiting icosahedra, starfield), lazy-loaded so the main bundle stays lean
+- **CSS 3D motion throughout**: rotating brand cube, mouse-tracking tilt + glare on
+  stat/team/recommendation cards, 3D flip grade badges, ambient depth orbs, skeleton
+  loaders, staggered view transitions, confetti on task completion
+- Respects `prefers-reduced-motion`; Escape closes modals; focus-visible outlines
+
 ### 👤 Users & personalised assignment
 - **Accounts**: register / login with PBKDF2-hashed passwords and bearer-token sessions
 - **Team management**: create teammates, view per-person workload (open, WIP, overdue,

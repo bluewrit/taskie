@@ -1,5 +1,6 @@
 import React from 'react';
 import Avatar from './Avatar.jsx';
+import BrandCube from './BrandCube.jsx';
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '◈' },
@@ -20,7 +21,7 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brand-mark">✓</span>
+        <BrandCube size={36} />
         <div>
           <div className="brand-name">Taskie</div>
           <div className="brand-sub">agentic workspace</div>

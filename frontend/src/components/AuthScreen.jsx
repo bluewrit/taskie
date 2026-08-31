@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { api, setToken } from '../api.js';
+import BrandCube from './BrandCube.jsx';
+
+// three.js is heavy — lazy-load the 3D scene only on the auth screen
+const AuthScene = React.lazy(() => import('./AuthScene.jsx'));
 
 export default function AuthScreen({ onAuth }) {
   const [mode, setMode] = useState('login');
@@ -32,14 +36,19 @@ export default function AuthScreen({ onAuth }) {
   return (
     <div className="auth">
       <div className="auth-brand">
-        <div className="auth-logo">✓</div>
-        <h1>Taskie</h1>
-        <p className="auth-tagline">Agentic task management for teams.<br />Your AI plans, recommends and evaluates — you ship.</p>
-        <ul className="auth-features">
-          <li><span>📎</span> Upload & preview <strong>any file type</strong> — docs, sheets, decks, PDFs, media, archives</li>
-          <li><span>🤖</span> An <strong>agent that acts</strong>: chat it into creating, prioritising and completing tasks</li>
-          <li><span>✦</span> Personalised <strong>recommendations, plans & grades</strong> for every teammate</li>
-        </ul>
+        <div className="auth-canvas">
+          <Suspense fallback={null}><AuthScene /></Suspense>
+        </div>
+        <div className="auth-brand-content">
+          <BrandCube size={52} />
+          <h1>Taskie</h1>
+          <p className="auth-tagline">Agentic task management for teams.<br />Your AI plans, recommends and evaluates — you ship.</p>
+          <ul className="auth-features">
+            <li><span>📎</span> Upload & preview <strong>any file type</strong> — docs, sheets, decks, PDFs, media, archives</li>
+            <li><span>🤖</span> An <strong>agent that acts</strong>: chat it into creating, prioritising and completing tasks</li>
+            <li><span>✦</span> Personalised <strong>recommendations, plans & grades</strong> for every teammate</li>
+          </ul>
+        </div>
       </div>
 
       <div className="auth-form-side">

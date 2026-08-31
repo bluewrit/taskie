@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api, STATUS_LABELS, fmtDate } from '../api.js';
 import Avatar from './Avatar.jsx';
+import { celebrate } from '../confetti.js';
 
 const COLUMNS = ['todo', 'in_progress', 'blocked', 'done'];
 
@@ -33,6 +34,7 @@ export default function TaskBoard({ tasks, onChanged, onOpenTask, onNew, notify 
     if (task.status === status) return;
     try {
       await api.updateTask(task.id, { status });
+      if (status === 'done' && task.status !== 'done') celebrate();
       onChanged();
     } catch (e) {
       notify(e.message, 'err');

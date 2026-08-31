@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api, setToken } from './api.js';
 import AuthScreen from './components/AuthScreen.jsx';
+import BrandCube from './components/BrandCube.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import Topbar from './components/Topbar.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -67,7 +68,12 @@ export default function App() {
   };
 
   if (booting) {
-    return <div className="boot-splash"><div className="boot-logo">✓</div><div className="muted">Loading your workspace…</div></div>;
+    return (
+      <div className="boot-splash">
+        <BrandCube size={60} />
+        <div className="muted">Loading your workspace…</div>
+      </div>
+    );
   }
   if (!me) {
     return <AuthScreen onAuth={(u) => { setMe(u); setView('dashboard'); }} />;
@@ -98,6 +104,9 @@ export default function App() {
 
   return (
     <div className="app">
+      <div className="bg-orbs" aria-hidden="true">
+        <div className="orb orb-a" /><div className="orb orb-b" /><div className="orb orb-c" />
+      </div>
       <Sidebar view={view} setView={setView} projects={projects} users={users} me={me}
                projectFilter={projectFilter} setProjectFilter={setProjectFilter}
                assigneeFilter={assigneeFilter} setAssigneeFilter={setAssigneeFilter}

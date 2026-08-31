@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
+import Tilt from './Tilt.jsx';
 
 const TYPE_ICONS = {
   overdue: '⏰', at_risk: '⚠️', quick_win: '⚡', stale: '🕸', wip_limit: '🚦',
@@ -51,19 +52,24 @@ export default function Recommendations({ onTasksChanged, notify }) {
         </div>
       )}
 
-      {loading && <p className="muted">Analysing your workspace…</p>}
+      {loading && (
+        <div className="rec-grid">
+          {[0, 1, 2].map((i) => <div key={i} className="skeleton skeleton-rec" />)}
+        </div>
+      )}
       {!loading && recs.length === 0 && <p className="muted">No recommendations — everything looks healthy.</p>}
 
       <div className="rec-grid">
-        {recs.map((r) => (
-          <div key={r.id} className={`rec-card rec-${r.severity}`}>
+        {recs.map((r, i) => (
+          <Tilt key={r.id} className={`rec-card rec-${r.severity}`} max={6}
+                style={{ animationDelay: `${Math.min(i * 40, 240)}ms` }}>
             <div className="rec-head">
               <span className="rec-icon">{TYPE_ICONS[r.type] || '✦'}</span>
               <span className={`sev sev-${r.severity}`}>{r.severity}</span>
             </div>
             <h4>{r.title}</h4>
             <p className="muted">{r.message}</p>
-          </div>
+          </Tilt>
         ))}
       </div>
     </div>

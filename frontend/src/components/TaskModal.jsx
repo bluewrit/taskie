@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api, STATUS_LABELS, fmtBytes, mediaUrl } from '../api.js';
 import Avatar from './Avatar.jsx';
 
@@ -18,6 +18,12 @@ export default function TaskModal({ task, projects, users, me, onClose, onSaved,
   const [upload, setUpload] = useState(null); // {name, pct}
   const inputRef = useRef(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const payload = () => ({
     ...form,

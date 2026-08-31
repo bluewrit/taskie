@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { api, STATUS_LABELS, fmtDate } from '../api.js';
 import Avatar from './Avatar.jsx';
+import { celebrate } from '../confetti.js';
 
 export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew, notify }) {
   const [query, setQuery] = useState('');
@@ -27,7 +28,7 @@ export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew
   const toggleDone = async (t) => {
     try {
       if (t.status === 'done') await api.updateTask(t.id, { status: 'todo' });
-      else await api.completeTask(t.id);
+      else { await api.completeTask(t.id); celebrate(); }
       onChanged();
     } catch (e) { notify(e.message, 'err'); }
   };

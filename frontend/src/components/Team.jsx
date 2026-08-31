@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { api } from '../api.js';
 import Avatar from './Avatar.jsx';
+import Tilt from './Tilt.jsx';
 
 const DAY_CAPACITY = 6 * 60; // minutes of focus time assumed per person per day
 
@@ -80,7 +81,7 @@ export default function Team({ users, tasks, me, onOpenTask, onChanged, notify, 
         {stats.map((s) => {
           const loadPct = Math.min(100, Math.round((s.loadMinutes / (DAY_CAPACITY * 3)) * 100));
           return (
-            <div key={s.user.id} className={`team-card ${s.user.id === me.id ? 'team-card-me' : ''}`}>
+            <Tilt key={s.user.id} max={5} className={`team-card ${s.user.id === me.id ? 'team-card-me' : ''}`}>
               <div className="team-card-head">
                 <Avatar user={s.user} size={44} />
                 <div className="team-card-id">
@@ -119,7 +120,7 @@ export default function Team({ users, tasks, me, onOpenTask, onChanged, notify, 
                 ))}
                 {s.top.length === 0 && <li className="muted" style={{ cursor: 'default' }}>No open tasks 🎉</li>}
               </ul>
-            </div>
+            </Tilt>
           );
         })}
       </div>
