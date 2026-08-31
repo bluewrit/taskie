@@ -1,7 +1,9 @@
 """Task and project CRUD endpoints (authenticated, assignment-aware)."""
-from datetime import datetime
+import csv
+import io
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models
@@ -191,6 +193,210 @@ def create_task(payload: TaskIn, db: Session = Depends(get_db),
     db.commit()
     db.refresh(task)
     return task
+
+
+# ------------------------------------------------------------------ import
+_STATUS_ALIASES = {
+    "todo": "todo", "to do": "todo", "to-do": "todo", "open": "todo", "new": "todo",
+    "backlog": "todo", "not started": "todo",
+    "in progress": "in_progress", "in_progress": "in_progress", "inprogress": "in_progress",
+    "doing": "in_progress", "started": "in_progress", "wip": "in_progress",
+    "done": "done", "complete": "done", "completed": "done", "finished": "done", "closed": "done",
+    "blocked": "blocked", "on hold": "blocked", "stuck": "blocked",
+}
+_PRIORITY_ALIASES = {
+    "low": "low", "minor": "low",
+    "medium": "medium", "med": "medium", "normal": "medium", "moderate": "medium",
+    "high": "high", "major": "high", "urgent": "high",
+    "critical": "critical", "crit": "critical", "blocker": "critical", "p0": "critical",
+}
+_COLUMN_ALIASES = {
+    "title": ["title", "task", "taskname", "name", "summary", "subject"],
+    "description": ["description", "desc", "details", "notes", "comments"],
+    "status": ["status", "state", "stage"],
+    "priority": ["priority", "prio", "severity", "importance"],
+    "due_date": ["duedate", "due", "deadline", "date", "dueby", "targetdate"],
+    "assignee": ["assignee", "assignedto", "owner", "assigned", "user", "username",
+                 "member", "responsible"],
+    "project": ["project", "projectname", "initiative", "workstream"],
+    "estimated_minutes": ["estimatedminutes", "estimate", "estimateminutes", "minutes",
+                          "effort", "time", "estimation"],
+    "hours": ["hours", "estimatedhours", "esthours"],
+    "progress": ["progress", "percent", "percentcomplete", "complete", "completion", "done"],
+    "tags": ["tags", "labels", "tag"],
+}
+_PROJECT_COLORS = ["#0a84ff", "#30d158", "#ff9f0a", "#bf5af2", "#64d2ff", "#ff375f",
+                   "#ffd60a", "#ac8e68"]
+
+
+def _norm_header(value) -> str:
+    return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
+
+
+def _parse_date(value):
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d %b %Y", "%d %B %Y",
+                "%b %d %Y", "%B %d, %Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognised date '{s}'")
+
+
+def _rows_from_upload(filename: str, data: bytes):
+    name = (filename or "").lower()
+    if name.endswith((".xlsx", ".xlsm")):
+        from openpyxl import load_workbook
+        try:
+            wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        except Exception as exc:  # corrupt / password-protected / fake extension
+            raise HTTPException(422, f"Could not read Excel file: {exc}")
+        ws = wb.active
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    if name.endswith(".csv"):
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = data.decode("latin-1")
+        return [list(r) for r in csv.reader(io.StringIO(text))]
+    raise HTTPException(422, "Unsupported file type — upload an .xlsx or .csv file "
+                             "(for .xls, re-save as .xlsx first)")
+
+
+@router.post("/tasks/import", status_code=201)
+async def import_tasks(file: UploadFile = File(...), db: Session = Depends(get_db),
+                       _: User = Depends(get_current_user)):
+    """Create tasks in bulk from an Excel (.xlsx) or CSV file.
+
+    The first non-empty row must be a header row; columns are matched
+    flexibly (e.g. 'Task', 'Title', 'Summary' all work). Unknown projects
+    are created on the fly; unknown assignees leave the task unassigned.
+    """
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(422, "File too large (10 MB max)")
+    rows = _rows_from_upload(file.filename, data)
+    rows = [r for r in rows if any(c is not None and str(c).strip() != "" for c in r)]
+    if not rows:
+        raise HTTPException(422, "File contains no data")
+    if len(rows) > 1001:
+        raise HTTPException(422, "Too many rows (1000 max per import)")
+
+    header = [_norm_header(c) for c in rows[0]]
+    colmap = {}  # canonical -> index
+    for canon, aliases in _COLUMN_ALIASES.items():
+        for idx, h in enumerate(header):
+            if h in aliases and canon not in colmap:
+                colmap[canon] = idx
+                break
+    if "title" not in colmap:
+        raise HTTPException(422, "No title column found — the header row needs a "
+                                 "'Title' (or 'Task'/'Name'/'Summary') column")
+
+    users = db.query(User).all()
+    by_username = {u.username.lower(): u for u in users}
+    by_name = {(u.full_name or "").lower(): u for u in users if u.full_name}
+    projects = {p.name.lower(): p for p in db.query(Project).all()}
+
+    created, skipped, projects_created = 0, [], []
+
+    def cell(row, canon):
+        idx = colmap.get(canon)
+        if idx is None or idx >= len(row):
+            return None
+        v = row[idx]
+        return v
+
+    for row_no, row in enumerate(rows[1:], start=2):
+        try:
+            title = str(cell(row, "title") or "").strip()
+            if not title:
+                skipped.append({"row": row_no, "reason": "missing title"})
+                continue
+
+            status_raw = str(cell(row, "status") or "").strip().lower()
+            status = _STATUS_ALIASES.get(status_raw, "todo" if not status_raw else None)
+            if status is None:
+                skipped.append({"row": row_no, "reason": f"unknown status '{status_raw}'"})
+                continue
+
+            prio_raw = str(cell(row, "priority") or "").strip().lower()
+            priority = _PRIORITY_ALIASES.get(prio_raw, "medium" if not prio_raw else None)
+            if priority is None:
+                skipped.append({"row": row_no, "reason": f"unknown priority '{prio_raw}'"})
+                continue
+
+            due = None
+            try:
+                due = _parse_date(cell(row, "due_date"))
+            except ValueError as exc:
+                skipped.append({"row": row_no, "reason": str(exc)})
+                continue
+
+            assignee = None
+            raw_assignee = str(cell(row, "assignee") or "").strip()
+            if raw_assignee:
+                assignee = by_username.get(raw_assignee.lower()) or by_name.get(raw_assignee.lower())
+
+            project = None
+            raw_project = str(cell(row, "project") or "").strip()
+            if raw_project:
+                project = projects.get(raw_project.lower())
+                if project is None:
+                    project = Project(name=raw_project,
+                                      color=_PROJECT_COLORS[len(projects) % len(_PROJECT_COLORS)])
+                    db.add(project)
+                    db.flush()
+                    projects[raw_project.lower()] = project
+                    projects_created.append(raw_project)
+
+            est = 60
+            if "hours" in colmap and cell(row, "hours") not in (None, ""):
+                try:
+                    est = max(15, int(float(cell(row, "hours")) * 60))
+                except (TypeError, ValueError):
+                    pass
+            elif cell(row, "estimated_minutes") not in (None, ""):
+                try:
+                    est = max(15, int(float(cell(row, "estimated_minutes"))))
+                except (TypeError, ValueError):
+                    pass
+
+            progress = 100 if status == "done" else 0
+            if status != "done" and cell(row, "progress") not in (None, ""):
+                try:
+                    progress = max(0, min(100, int(float(cell(row, "progress")))))
+                except (TypeError, ValueError):
+                    pass
+
+            db.add(Task(
+                title=title[:300],
+                description=str(cell(row, "description") or "").strip(),
+                status=status,
+                priority=priority,
+                due_date=due,
+                assignee_id=assignee.id if assignee else None,
+                project_id=project.id if project else None,
+                estimated_minutes=est,
+                progress=progress,
+                tags=str(cell(row, "tags") or "").strip(),
+            ))
+            created += 1
+        except HTTPException:
+            raise
+        except Exception as exc:  # defensive: never 500 on one bad row
+            skipped.append({"row": row_no, "reason": str(exc)[:120]})
+
+    db.commit()
+    return {"created": created, "skipped": skipped, "projects_created": projects_created,
+            "columns_found": sorted(colmap.keys())}
 
 
 @router.get("/tasks/{task_id}", response_model=TaskOut)

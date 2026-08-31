@@ -1025,3 +1025,68 @@ html[data-theme='light'] .team-card:hover { box-shadow: var(--shadow-hover); }
 
 /* topbar right cluster */
 .topbar-right { display: flex; align-items: center; gap: 16px; }
+
+/* ============================================================ analytics charts */
+.analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.analytics-wide { grid-column: 1 / -1; }
+.chart-flex { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+
+.donut-wrap { position: relative; width: 170px; height: 170px; flex: none; }
+.donut { width: 100%; height: 100%; }
+.donut-seg { transition: stroke-dasharray 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.donut-total { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; }
+
+.chart-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 180px; flex: 1; }
+.chart-legend li { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; }
+.chart-legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.legend-label { flex: 1; }
+.legend-value { font-weight: 700; min-width: 22px; text-align: right; }
+
+.chart-bars { display: flex; gap: 14px; align-items: stretch; height: 190px; padding-top: 8px; }
+.chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; }
+.chart-bar-value { font-size: 0.82rem; font-weight: 700; }
+.chart-bar-track { flex: 1; width: 100%; max-width: 54px; display: flex; align-items: flex-end; background: var(--panel-2); border-radius: 8px; overflow: hidden; }
+.chart-bar { width: 100%; border-radius: 8px 8px 0 0; min-height: 3px; transition: height 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); transition-delay: calc(var(--i, 0) * 0.08s); }
+.chart-bar-label { font-size: 0.72rem; color: var(--muted); text-align: center; }
+
+.hbars { display: flex; flex-direction: column; gap: 10px; }
+.hbar-row { display: grid; grid-template-columns: minmax(110px, 180px) 1fr 34px; align-items: center; gap: 12px; }
+.hbar-label { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hbar-track { height: 14px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.hbar-fill { height: 100%; border-radius: 99px; min-width: 4px; transition: width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); transition-delay: calc(var(--i, 0) * 0.07s); }
+.hbar-value { font-size: 0.82rem; font-weight: 700; text-align: right; }
+
+/* ============================================================ import modal */
+.import-modal { width: 520px; }
+.import-cols { display: block; margin-top: 4px; color: var(--muted); }
+.import-drop {
+  border: 2px dashed var(--border); border-radius: 14px; padding: 30px 20px;
+  text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s, transform 0.2s;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.import-drop:hover, .import-drop.over { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.01); }
+.import-drop.busy { pointer-events: none; }
+.import-drop-icon { font-size: 2.2rem; }
+.import-progress { width: 100%; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.import-progress-bar { width: 70%; height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.import-progress-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 99px; transition: width 0.2s; }
+.import-result { margin-top: 14px; padding: 12px 14px; background: var(--panel-2); border-radius: 12px; animation: fadeup 0.3s ease backwards; }
+.import-result-head { font-weight: 600; }
+.import-ok { color: var(--t-ok); }
+.import-skipped { margin: 8px 0 0; padding-left: 18px; }
+
+/* ============================================================ new project form */
+.new-project-btn {
+  margin: 4px 12px 0; width: calc(100% - 24px); padding: 7px 10px; text-align: left;
+  background: none; border: 1px dashed var(--border); border-radius: 10px;
+  color: var(--muted); cursor: pointer; font-size: 0.82rem;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.new-project-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.new-project-form { margin: 8px 12px; padding: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 9px; animation: fadeup 0.25s ease backwards; }
+.color-row { display: flex; gap: 7px; flex-wrap: wrap; }
+.color-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; transition: transform 0.15s, border-color 0.15s; }
+.color-dot:hover { transform: scale(1.15); }
+.color-dot.sel { border-color: var(--text); transform: scale(1.15); }
+.new-project-actions { display: flex; gap: 8px; }

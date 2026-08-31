@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Avatar from './Avatar.jsx';
 import BrandCube from './BrandCube.jsx';
 
@@ -6,6 +6,7 @@ const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '◈' },
   { id: 'board', label: 'Board', icon: '▦' },
   { id: 'list', label: 'Tasks', icon: '☰' },
+  { id: 'analytics', label: 'Analytics', icon: '📈' },
   { id: 'team', label: 'Team', icon: '👥' },
   { id: 'recommendations', label: 'Recommendations', icon: '✦' },
   { id: 'planner', label: 'Planner', icon: '🗓' },
@@ -13,11 +14,24 @@ const NAV = [
   { id: 'agent', label: 'AI Agent', icon: '🤖' },
 ];
 
+const PROJECT_COLORS = ['#0a84ff', '#30d158', '#ff9f0a', '#bf5af2', '#64d2ff', '#ff375f', '#ffd60a', '#6e6e73'];
+
 export default function Sidebar({
   view, setView, projects, users, me,
   projectFilter, setProjectFilter, assigneeFilter, setAssigneeFilter,
-  onNewTask, onOpenProject, hubProjectId, taskCount,
+  onNewTask, onOpenProject, hubProjectId, taskCount, onCreateProject,
 }) {
+  const [adding, setAdding] = useState(false);
+  const [pname, setPname] = useState('');
+  const [pcolor, setPcolor] = useState(PROJECT_COLORS[0]);
+
+  const submitProject = async () => {
+    const name = pname.trim();
+    if (!name) return;
+    await onCreateProject?.(name, pcolor);
+    setPname('');
+    setAdding(false);
+  };
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -71,7 +85,31 @@ export default function Sidebar({
                     onClick={() => setProjectFilter(String(projectFilter) === String(p.id) ? '' : p.id)}>⌖</button>
           </div>
         ))}
-        {projects.length === 0 && <div className="muted small" style={{ padding: '2px 12px' }}>No projects yet</div>}
+        {projects.length === 0 && !adding && (
+          <div className="muted small" style={{ padding: '2px 12px' }}>No projects yet</div>
+        )}
+        <button className="new-project-btn" onClick={() => setAdding((a) => !a)}>
+          ＋ New project
+        </button>
+        {adding && (
+          <div className="new-project-form">
+            <input className="input input-sm" placeholder="Project name" value={pname}
+                   onChange={(e) => setPname(e.target.value)} autoFocus
+                   onKeyDown={(e) => e.key === 'Enter' && submitProject()} />
+            <div className="color-row">
+              {PROJECT_COLORS.map((c) => (
+                <button key={c} type="button"
+                        className={`color-dot ${pcolor === c ? 'sel' : ''}`}
+                        style={{ background: c }}
+                        onClick={() => setPcolor(c)} aria-label={`Color ${c}`} />
+              ))}
+            </div>
+            <div className="new-project-actions">
+              <button className="btn btn-primary btn-sm" onClick={submitProject}>Create</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="sidebar-footer">

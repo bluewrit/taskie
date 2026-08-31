@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api, STATUS_LABELS, fmtDate } from '../api.js';
 import Avatar from './Avatar.jsx';
+import ImportModal from './ImportModal.jsx';
 import { celebrate } from '../confetti.js';
 
 const COLUMNS = ['todo', 'in_progress', 'blocked', 'done'];
@@ -30,6 +31,7 @@ function TaskCard({ task, onOpen, onDragStart, index = 0 }) {
 
 export default function TaskBoard({ tasks, onChanged, onOpenTask, onNew, notify }) {
   const [dragOver, setDragOver] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   const move = async (task, status) => {
     if (task.status === status) return;
@@ -49,8 +51,13 @@ export default function TaskBoard({ tasks, onChanged, onOpenTask, onNew, notify 
           <h1>Board</h1>
           <p className="muted">Drag cards between columns to update status.</p>
         </div>
-        <button className="btn btn-primary" onClick={onNew}>＋ New task</button>
+        <div className="row">
+          <button className="btn" onClick={() => setImporting(true)}>⇪ Import Excel</button>
+          <button className="btn btn-primary" onClick={onNew}>＋ New task</button>
+        </div>
       </header>
+      {importing && <ImportModal onClose={() => setImporting(false)}
+                                 onImported={onChanged} notify={notify} />}
 
       <div className="board">
         {COLUMNS.map((col) => {

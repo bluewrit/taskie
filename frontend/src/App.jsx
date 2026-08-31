@@ -15,6 +15,7 @@ import Planner from './components/Planner.jsx';
 import Evaluation from './components/Evaluation.jsx';
 import Team from './components/Team.jsx';
 import ProjectHub from './components/ProjectHub.jsx';
+import Analytics from './components/Analytics.jsx';
 
 const initialTheme = () => {
   try {
@@ -122,6 +123,7 @@ export default function App() {
                   onPreview={setPreviewFileId} notify={notify}
                   onViewTasks={() => { setProjectFilter(String(hubProject.id)); setView('list'); }} />
     ) : <div className="view"><p className="muted">Pick a project from the sidebar.</p></div>,
+    analytics: <Analytics tasks={tasks} me={me} />,
     recommendations: <Recommendations onTasksChanged={onTasksChanged} notify={notify} />,
     planner: <Planner me={me} />,
     evaluation: <Evaluation me={me} />,
@@ -139,6 +141,13 @@ export default function App() {
                onNewTask={() => setModalTask('new')}
                onOpenProject={(p) => { setHubProject(p); setView('project'); }}
                hubProjectId={hubProject?.id}
+               onCreateProject={async (name, color) => {
+                 try {
+                   await api.createProject({ name, color });
+                   await refresh();
+                   notify(`Project “${name}” created`);
+                 } catch (e) { notify(e.message, 'err'); }
+               }}
                taskCount={tasks.filter((t) => t.status !== 'done').length} />
       <div className="main-wrap">
         <Topbar me={me} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} />

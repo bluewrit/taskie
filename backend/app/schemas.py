@@ -99,6 +99,7 @@ class TaskOut(TaskIn):
     updated_at: datetime
     completed_at: datetime | None
     assignee: UserOut | None = None
+    project: ProjectOut | None = None
     files: list[FileOut] = []
 
 

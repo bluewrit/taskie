@@ -96,6 +96,28 @@ export const api = {
   projectMessages: (id, after = 0) => get(`/api/projects/${id}/messages?after=${after}`),
   postProjectMessage: (id, body) => send(`/api/projects/${id}/messages`, 'POST', { body }),
 
+  // ---- excel / csv bulk import
+  importTasks(file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const form = new FormData();
+      form.append('file', file);
+      xhr.open('POST', withToken('/api/tasks/import'));
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+        else {
+          let msg = `Import failed (${xhr.status})`;
+          try { msg = JSON.parse(xhr.responseText).detail || msg; } catch { /* keep default */ }
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Import failed (network)'));
+      xhr.send(form);
+    });
+  },
+
   listTasks: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null && v !== false)).toString();
     return get(`/api/tasks${qs ? `?${qs}` : ''}`);

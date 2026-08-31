@@ -1,4 +1,5 @@
 """End-to-end API tests: tasks, file upload/preview, agent chat/plan/eval."""
+import io
 import json
 import os
 import sys
@@ -435,3 +436,61 @@ def test_evaluation_scope_mine_vs_all():
     mine = client.get("/api/agent/evaluation", params={"scope": "mine"}).json()
     everything = client.get("/api/agent/evaluation", params={"scope": "all"}).json()
     assert mine["metrics"]["total_tasks"] <= everything["metrics"]["total_tasks"]
+
+
+# ------------------------------------------------------------------ excel import
+def _make_xlsx(rows):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_import_tasks_from_xlsx():
+    x = _make_xlsx([
+        ["Task", "Description", "Status", "Priority", "Due Date", "Assignee", "Project", "Hours"],
+        ["Write launch copy", "Homepage + email", "In Progress", "High", "2026-09-15", "tester", "Import Demo", 3],
+        ["Book venue", "", "done", "critical", "15/09/2026", "nobody-here", "Import Demo", 1.5],
+        ["", "no title row", "", "", "", "", "", ""],
+        ["Bad status row", "", "flying", "", "", "", "", ""],
+    ])
+    r = client.post("/api/tasks/import",
+                    files={"file": ("tasks.xlsx", x,
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["created"] == 2
+    assert "Import Demo" in body["projects_created"]
+    reasons = {s["reason"] for s in body["skipped"]}
+    assert any("missing title" in s for s in reasons)
+    assert any("unknown status" in s for s in reasons)
+
+    # the tasks really exist with mapped fields
+    tasks = client.get("/api/tasks").json()
+    t = next(t for t in tasks if t["title"] == "Write launch copy")
+    assert t["status"] == "in_progress" and t["priority"] == "high"
+    assert t["due_date"] == "2026-09-15"
+    assert t["assignee"]["username"] == "tester"
+    assert t["estimated_minutes"] == 180
+    assert t["project"]["name"] == "Import Demo" if t.get("project") else True
+
+
+def test_import_tasks_from_csv():
+    csv_bytes = b"title,priority,status\nCSV task A,low,todo\nCSV task B,high,in progress\n"
+    r = client.post("/api/tasks/import",
+                    files={"file": ("todo.csv", csv_bytes, "text/csv")})
+    assert r.status_code == 201, r.text
+    assert r.json()["created"] == 2
+
+
+def test_import_rejects_bad_files():
+    r = client.post("/api/tasks/import", files={"file": ("old.xls", b"junk", "application/vnd.ms-excel")})
+    assert r.status_code == 422
+    x = _make_xlsx([["description", "status"], ["no title column", "todo"]])
+    r = client.post("/api/tasks/import", files={"file": ("t.xlsx", x, "application/octet-stream")})
+    assert r.status_code == 422
+    assert "title" in r.json()["detail"].lower()

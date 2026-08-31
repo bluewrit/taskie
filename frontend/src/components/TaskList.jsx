@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { api, STATUS_LABELS, fmtDate } from '../api.js';
 import Avatar from './Avatar.jsx';
+import ImportModal from './ImportModal.jsx';
 import { celebrate } from '../confetti.js';
 
 export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew, notify }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [sort, setSort] = useState('score');
+  const [importing, setImporting] = useState(false);
 
   const rows = useMemo(() => {
     const out = tasks.filter((t) =>
@@ -40,8 +42,13 @@ export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew
           <h1>Tasks</h1>
           <p className="muted">{rows.length} task(s)</p>
         </div>
-        <button className="btn btn-primary" onClick={onNew}>＋ New task</button>
+        <div className="row">
+          <button className="btn" onClick={() => setImporting(true)}>⇪ Import Excel</button>
+          <button className="btn btn-primary" onClick={onNew}>＋ New task</button>
+        </div>
       </header>
+      {importing && <ImportModal onClose={() => setImporting(false)}
+                                 onImported={onChanged} notify={notify} />}
 
       <div className="toolbar">
         <input className="input" placeholder="Search tasks…" value={query} onChange={(e) => setQuery(e.target.value)} />
