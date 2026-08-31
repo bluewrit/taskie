@@ -346,6 +346,29 @@ def test_chat_assign_to_teammate_by_name():
     client.delete(f"/api/users/{mate['id']}")
 
 
+def test_cookie_only_auth_survives_header_stripping_proxy():
+    """The preview proxy strips Authorization headers — cookies must work alone."""
+    anon = TestClient(app)
+    r = anon.post("/api/auth/login", json={"username": "demo", "password": "taskie123"})
+    assert r.status_code == 200
+    assert "taskie_token" in r.cookies
+
+    # simulate the proxy: strip every Authorization header, keep the cookie jar
+    anon.headers.pop("Authorization", None)
+    assert anon.get("/api/tasks").status_code == 200
+    assert anon.get("/api/agent/recommendations").status_code == 200
+    assert anon.get("/api/auth/me").json()["username"] == "demo"
+
+    # media endpoints work via cookie too (no ?token= needed)
+    tasks = anon.get("/api/tasks").json()
+    fid = next(f["id"] for t in tasks for f in t["files"])
+    assert anon.get(f"/api/files/{fid}/raw").status_code == 200
+
+    # logout clears the cookie and the DB record
+    assert anon.post("/api/auth/logout").status_code == 204
+    assert anon.get("/api/tasks").status_code == 401
+
+
 def test_evaluation_scope_mine_vs_all():
     mine = client.get("/api/agent/evaluation", params={"scope": "mine"}).json()
     everything = client.get("/api/agent/evaluation", params={"scope": "all"}).json()

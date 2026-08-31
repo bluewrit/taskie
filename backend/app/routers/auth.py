@@ -1,18 +1,27 @@
 """Authentication: register, login, logout, current user."""
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from .. import security
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import COOKIE_NAME, get_current_user
 from ..models import AuthToken, User
 from ..schemas import AuthOut, LoginIn, RegisterIn, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 PALETTE = ["#6366f1", "#10b981", "#f59e0b", "#ec4899", "#38bdf8", "#8b5cf6", "#ef4444", "#14b8a6"]
+
+COOKIE_MAX_AGE = 30 * 24 * 3600
+
+
+def _set_session_cookie(response: Response, token: str):
+    response.set_cookie(
+        COOKIE_NAME, token,
+        max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax", path="/",
+    )
 
 
 def _issue_token(db: Session, user: User) -> AuthOut:
@@ -23,7 +32,7 @@ def _issue_token(db: Session, user: User) -> AuthOut:
 
 
 @router.post("/register", response_model=AuthOut, status_code=201)
-def register(payload: RegisterIn, db: Session = Depends(get_db)):
+def register(payload: RegisterIn, response: Response, db: Session = Depends(get_db)):
     username = payload.username.strip().lower()
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(409, f"Username '{username}' is already taken")
@@ -39,25 +48,33 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return _issue_token(db, user)
+    auth = _issue_token(db, user)
+    _set_session_cookie(response, auth.token)
+    return auth
 
 
 @router.post("/login", response_model=AuthOut)
-def login(payload: LoginIn, db: Session = Depends(get_db)):
+def login(payload: LoginIn, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username.strip().lower()).first()
     if not user or not security.verify_password(payload.password, user.password_hash):
         raise HTTPException(401, "Incorrect username or password")
-    return _issue_token(db, user)
+    auth = _issue_token(db, user)
+    _set_session_cookie(response, auth.token)
+    return auth
 
 
 @router.post("/logout", status_code=204)
-def logout(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.removeprefix("Bearer ").strip()
+def logout(response: Response, request: Request,
+           authorization: str | None = Header(default=None),
+           db: Session = Depends(get_db)):
+    token = authorization.removeprefix("Bearer ").strip() if authorization else None
+    token = token or request.cookies.get(COOKIE_NAME)
+    if token:
         record = db.query(AuthToken).filter(AuthToken.token == token).first()
         if record:
             db.delete(record)
             db.commit()
+    response.delete_cookie(COOKIE_NAME, path="/")
 
 
 @router.get("/me", response_model=UserOut)

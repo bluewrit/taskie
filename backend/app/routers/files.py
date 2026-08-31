@@ -11,7 +11,7 @@ import re
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -24,14 +24,17 @@ from ..services import preview as preview_service
 router = APIRouter(prefix="/api", tags=["files"])
 
 
-def _stream_user(token: str | None, db: Session) -> User:
+def _stream_user(request, token: str | None, db: Session) -> User:
     """Auth for <img>/<video>/<iframe>/download links that cannot set headers.
 
-    Accepts the same bearer token passed as ?token=... (session tokens are
-    short-lived; URLs are generated per-render and never shared).
+    Accepts the session cookie (sent automatically) or ?token=... as a
+    fallback (session tokens are short-lived; URLs are per-render).
     """
     from datetime import datetime
 
+    from ..deps import extract_token
+
+    token = extract_token(request, None) or token
     if not token:
         raise HTTPException(401, "Not authenticated")
     record = db.query(AuthToken).filter(AuthToken.token == token).first()
@@ -91,11 +94,11 @@ async def upload_file(task_id: int, file: UploadFile, db: Session = Depends(get_
 
 
 @router.get("/files/{file_id}/raw")
-def raw_file(file_id: int, token: str | None = None,
+def raw_file(request: Request, file_id: int, token: str | None = None,
              range_header: str | None = Header(default=None, alias="Range"),
              db: Session = Depends(get_db)):
     """Inline stream; honours Range requests so <video>/<audio> can seek."""
-    _stream_user(token, db)
+    _stream_user(request, token, db)
     request_range = range_header
     att = _get_attachment(db, file_id)
     path = _stored_path(att)
@@ -139,8 +142,9 @@ def raw_file(file_id: int, token: str | None = None,
 
 
 @router.get("/files/{file_id}/download")
-def download_file(file_id: int, token: str | None = None, db: Session = Depends(get_db)):
-    _stream_user(token, db)
+def download_file(request: Request, file_id: int, token: str | None = None,
+                  db: Session = Depends(get_db)):
+    _stream_user(request, token, db)
     from fastapi.responses import FileResponse
 
     att = _get_attachment(db, file_id)

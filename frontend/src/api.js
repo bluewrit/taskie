@@ -22,6 +22,9 @@ function authHeaders(extra) {
   return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };
 }
 
+// `credentials: 'same-origin'` sends the session cookie. The cookie is the
+// primary auth channel in the browser because some preview proxies strip
+// Authorization headers; the bearer token is kept as a fallback.
 async function handle(res) {
   if (!res.ok) {
     let detail = res.statusText;
@@ -29,7 +32,7 @@ async function handle(res) {
       const body = await res.json();
       detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail ?? body);
     } catch { /* ignore */ }
-    if (res.status === 401 && token) {
+    if (res.status === 401 && !res.url.includes('/api/auth/')) {
       setToken(null);
       window.dispatchEvent(new Event('taskie:unauthorized'));
     }
@@ -39,9 +42,10 @@ async function handle(res) {
   return res.json();
 }
 
-const get = (url) => fetch(url, { headers: authHeaders() }).then(handle);
+const get = (url) => fetch(url, { headers: authHeaders(), credentials: 'same-origin' }).then(handle);
 const send = (url, method, data) => fetch(url, {
   method,
+  credentials: 'same-origin',
   headers: authHeaders({ 'Content-Type': 'application/json' }),
   body: data === undefined ? undefined : JSON.stringify(data),
 }).then(handle);
