@@ -20,6 +20,31 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(60), unique=True, nullable=False, index=True)
+    full_name: Mapped[str] = mapped_column(String(120), default="")
+    email: Mapped[str] = mapped_column(String(160), default="")
+    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    color: Mapped[str] = mapped_column(String(16), default="#6366f1")
+    role: Mapped[str] = mapped_column(String(16), default="member")  # admin | member
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    assigned_tasks: Mapped[list["Task"]] = relationship(back_populates="assignee")
+
+
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -41,6 +66,9 @@ class Task(Base):
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
     )
+    assignee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="todo", index=True)
@@ -56,6 +84,7 @@ class Task(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     project: Mapped[Project | None] = relationship(back_populates="tasks")
+    assignee: Mapped[User | None] = relationship(back_populates="assigned_tasks")
     files: Mapped[list["FileAttachment"]] = relationship(
         back_populates="task", cascade="all, delete-orphan"
     )

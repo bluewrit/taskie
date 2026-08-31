@@ -6,7 +6,7 @@ and from proactive runs.
 """
 from datetime import date, datetime
 
-from ...models import AgentAction, Project, Task
+from ...models import AgentAction, Project, Task, User
 
 VALID_STATUS = {"todo", "in_progress", "done", "blocked"}
 VALID_PRIORITY = {"low", "medium", "high", "critical"}
@@ -17,11 +17,23 @@ def log_action(db, kind: str, summary: str, detail: dict | None = None):
     db.commit()
 
 
+def resolve_user(db, name: str) -> User | None:
+    """Find a user by username or (partial, case-insensitive) full name."""
+    name = name.strip().lower()
+    user = db.query(User).filter(User.username == name).first()
+    if user:
+        return user
+    return db.query(User).filter(User.full_name.ilike(f"%{name}%")).first()
+
+
 # ------------------------------------------------------------------ tools
-def tool_list_tasks(db, status: str | None = None, limit: int = 20, **_):
+def tool_list_tasks(db, status: str | None = None, limit: int = 20,
+                    assignee_id: int | None = None, **_):
     q = db.query(Task).order_by(Task.agent_score.desc(), Task.id.desc())
     if status:
         q = q.filter(Task.status == status)
+    if assignee_id:
+        q = q.filter(Task.assignee_id == assignee_id)
     tasks = q.limit(limit).all()
     return {
         "count": len(tasks),
@@ -29,6 +41,7 @@ def tool_list_tasks(db, status: str | None = None, limit: int = 20, **_):
             {
                 "id": t.id, "title": t.title, "status": t.status,
                 "priority": t.priority,
+                "assignee": t.assignee.full_name if t.assignee else "unassigned",
                 "due_date": (t.due_date.date() if isinstance(t.due_date, datetime) else t.due_date).isoformat() if t.due_date else None,
                 "progress": t.progress, "agent_score": t.agent_score,
             }
@@ -69,7 +82,7 @@ def _find_task(db, task_id: int | None = None, title: str | None = None) -> Task
 
 def tool_create_task(db, title: str, description: str = "", priority: str = "medium",
                      due_date: str | None = None, estimated_minutes: int = 60,
-                     project_name: str | None = None, **_):
+                     project_name: str | None = None, assignee_id: int | None = None, **_):
     priority = priority if priority in VALID_PRIORITY else "medium"
     project = None
     if project_name:
@@ -78,26 +91,36 @@ def tool_create_task(db, title: str, description: str = "", priority: str = "med
         title=title[:300], description=description, priority=priority,
         estimated_minutes=max(5, int(estimated_minutes or 60)),
         project_id=project.id if project else None,
+        assignee_id=assignee_id,
         due_date=date.fromisoformat(due_date) if due_date else None,
     )
     db.add(task)
     db.commit()
     db.refresh(task)
-    log_action(db, "chat", f"Created task #{task.id}: {task.title}",
+    who = task.assignee.full_name if task.assignee else "unassigned"
+    log_action(db, "chat", f"Created task #{task.id}: {task.title} (→ {who})",
                {"tool": "create_task", "task_id": task.id})
     return {"created": True, "task_id": task.id, "title": task.title,
-            "priority": task.priority,
+            "priority": task.priority, "assignee": who,
             "due_date": task.due_date.isoformat() if task.due_date else None}
 
 
 def tool_update_task(db, task_id: int | None = None, title: str | None = None,
                      status: str | None = None, priority: str | None = None,
                      due_date: str | None = None, progress: int | None = None,
+                     assignee_id: int | None = None, assignee_name: str | None = None,
                      **_):
     task = _find_task(db, task_id=task_id, title=title)
     if not task:
         return {"updated": False, "error": "No matching task found."}
     changes = {}
+    if assignee_name:
+        user = resolve_user(db, assignee_name)
+        if user:
+            assignee_id = user.id
+    if assignee_id:
+        task.assignee_id = assignee_id
+        changes["assignee_id"] = assignee_id
     if status in VALID_STATUS:
         changes["status"] = status
         task.status = status
@@ -169,24 +192,24 @@ def tool_reschedule_task(db, task_id: int | None = None, title: str | None = Non
     return {"rescheduled": True, "task_id": task.id, "title": task.title, "due_date": due_date}
 
 
-def tool_recommendations(db, **_):
+def tool_recommendations(db, user_id: int | None = None, **_):
     from .recommender import generate_recommendations
-    recs = generate_recommendations(db)
+    recs = generate_recommendations(db, user_id=user_id)
     log_action(db, "proactive", f"Generated {len(recs)} recommendations", {"count": len(recs)})
     return {"count": len(recs), "recommendations": recs}
 
 
-def tool_plan(db, horizon_days: int = 7, **_):
+def tool_plan(db, horizon_days: int = 7, user_id: int | None = None, **_):
     from .planner import build_plan
-    plan = build_plan(db, horizon_days=horizon_days)
+    plan = build_plan(db, horizon_days=horizon_days, user_id=user_id)
     log_action(db, "planner", f"Built {horizon_days}-day plan ({plan['summary']['tasks_planned']} tasks)",
                {"horizon_days": horizon_days})
     return plan
 
 
-def tool_evaluate(db, **_):
+def tool_evaluate(db, user_id: int | None = None, **_):
     from .evaluator import evaluate
-    report = evaluate(db)
+    report = evaluate(db, user_id=user_id)
     log_action(db, "evaluation", f"Performance grade {report['grade']} ({report['overall_score']}/100)",
                {"grade": report["grade"]})
     return report

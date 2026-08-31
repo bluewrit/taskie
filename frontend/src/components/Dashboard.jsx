@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, fmtDate } from '../api.js';
+import Avatar from './Avatar.jsx';
 
 function Sparkbars({ data }) {
   const max = Math.max(1, ...data.map((d) => d.completed));
@@ -14,40 +15,43 @@ function Sparkbars({ data }) {
   );
 }
 
-export default function Dashboard({ tasks, projects, onOpenTask, onNavigate }) {
+export default function Dashboard({ tasks, projects, users, me, onOpenTask, onNavigate }) {
   const [evalData, setEvalData] = useState(null);
   const [recs, setRecs] = useState([]);
 
   useEffect(() => {
-    api.agentEvaluation().then(setEvalData).catch(() => {});
+    api.agentEvaluation('mine').then(setEvalData).catch(() => {});
     api.agentRecommendations().then((r) => setRecs(r.recommendations.slice(0, 4))).catch(() => {});
-  }, [tasks.length]);
+  }, [tasks.length, me.id]);
 
   const today = new Date().toISOString().slice(0, 10);
-  const open = tasks.filter((t) => t.status !== 'done');
-  const overdue = open.filter((t) => t.due_date && t.due_date < today);
-  const dueToday = open.filter((t) => t.due_date === today);
-  const doneWeek = tasks.filter((t) => t.status === 'done' && t.completed_at &&
+  const mine = tasks.filter((t) => t.assignee?.id === me.id);
+  const myOpen = mine.filter((t) => t.status !== 'done');
+  const overdue = myOpen.filter((t) => t.due_date && t.due_date < today);
+  const dueToday = myOpen.filter((t) => t.due_date === today);
+  const doneWeek = mine.filter((t) => t.status === 'done' && t.completed_at &&
     (Date.now() - new Date(t.completed_at + 'Z').getTime()) / 86400000 <= 7);
-  const top = [...open].sort((a, b) => b.agent_score - a.agent_score).slice(0, 5);
+  const top = [...myOpen].sort((a, b) => b.agent_score - a.agent_score).slice(0, 5);
 
   const stats = [
-    { label: 'Open tasks', value: open.length, cls: '' },
+    { label: 'My open tasks', value: myOpen.length, cls: '' },
     { label: 'Due today', value: dueToday.length, cls: dueToday.length ? 'stat-warn' : '' },
     { label: 'Overdue', value: overdue.length, cls: overdue.length ? 'stat-danger' : '' },
     { label: 'Done (7d)', value: doneWeek.length, cls: 'stat-ok' },
   ];
 
+  const first = (me.full_name || me.username).split(' ')[0];
+
   return (
     <div className="view">
       <header className="view-header">
         <div>
-          <h1>Dashboard</h1>
-          <p className="muted">Your workspace at a glance — powered by the agent.</p>
+          <h1>Hi {first} — here's your day</h1>
+          <p className="muted">Personalised by your agent: what to do, when, and how you're doing.</p>
         </div>
         {evalData && (
-          <div className="grade-chip" title={`Overall score ${evalData.overall_score}/100`}>
-            Grade <strong>{evalData.grade}</strong>
+          <div className="grade-chip" title={`Your overall score ${evalData.overall_score}/100`}>
+            Your grade <strong>{evalData.grade}</strong>
           </div>
         )}
       </header>
@@ -63,8 +67,8 @@ export default function Dashboard({ tasks, projects, onOpenTask, onNavigate }) {
 
       <div className="dash-cols">
         <section className="panel">
-          <h3>Focus next <span className="muted">(by agent score)</span></h3>
-          {top.length === 0 && <p className="muted">No open tasks. Enjoy the calm 🌤</p>}
+          <h3>Focus next <span className="muted">(your tasks, by agent score)</span></h3>
+          {top.length === 0 && <p className="muted">Nothing assigned to you. Enjoy the calm 🌤</p>}
           <ul className="mini-list">
             {top.map((t) => (
               <li key={t.id} onClick={() => onOpenTask(t)}>
@@ -94,7 +98,7 @@ export default function Dashboard({ tasks, projects, onOpenTask, onNavigate }) {
         </section>
 
         <section className="panel">
-          <h3>Throughput <span className="muted">(14 days)</span></h3>
+          <h3>Your throughput <span className="muted">(14 days)</span></h3>
           {evalData ? <Sparkbars data={evalData.throughput} /> : <p className="muted">Loading…</p>}
           <div className="panel-foot">
             <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('planner')}>Plan my week →</button>
@@ -102,6 +106,24 @@ export default function Dashboard({ tasks, projects, onOpenTask, onNavigate }) {
           </div>
         </section>
       </div>
+
+      <section className="panel">
+        <h3>Team workload</h3>
+        <div className="team-strip">
+          {users.map((u) => {
+            const uOpen = tasks.filter((t) => t.assignee?.id === u.id && t.status !== 'done');
+            const load = uOpen.reduce((s, t) => s + (t.estimated_minutes || 60), 0);
+            return (
+              <div key={u.id} className="team-strip-item" title={`${uOpen.length} open · ${(load / 60).toFixed(1)}h load`}>
+                <Avatar user={u} size={34} />
+                <div className="team-strip-name">{(u.full_name || u.username).split(' ')[0]}</div>
+                <div className="muted small">{uOpen.length} open · {(load / 60).toFixed(0)}h</div>
+              </div>
+            );
+          })}
+          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('team')}>Manage team →</button>
+        </div>
+      </section>
 
       <section className="panel">
         <h3>Projects</h3>

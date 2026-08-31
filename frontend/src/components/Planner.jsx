@@ -1,18 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api, fmtDate } from '../api.js';
 
-export default function Planner() {
+export default function Planner({ me }) {
   const [horizon, setHorizon] = useState(7);
   const [capacity, setCapacity] = useState(6);
+  const [scope, setScope] = useState('mine');
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.agentPlan(horizon, capacity * 60)
+    api.agentPlan(horizon, capacity * 60, scope)
       .then(setPlan)
       .finally(() => setLoading(false));
-  }, [horizon, capacity]);
+  }, [horizon, capacity, scope]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -21,9 +22,13 @@ export default function Planner() {
       <header className="view-header">
         <div>
           <h1>Planner</h1>
-          <p className="muted">The agent schedules your backlog day-by-day around due dates, priority scores and focus capacity.</p>
+          <p className="muted">The agent schedules the backlog day-by-day around due dates, priority scores and focus capacity.</p>
         </div>
         <div className="row-gap">
+          <div className="scope-toggle">
+            <button className={scope === 'mine' ? 'active' : ''} onClick={() => setScope('mine')}>My plan</button>
+            <button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>Whole team</button>
+          </div>
           <label className="inline-label">Horizon
             <select className="input input-sm" value={horizon} onChange={(e) => setHorizon(Number(e.target.value))}>
               <option value={1}>Today</option>
@@ -69,6 +74,9 @@ export default function Planner() {
                     <div key={i} className={`plan-block pb-${b.priority}`}>
                       <span className="plan-time">{b.time}</span>
                       <span className="plan-title">{b.title}</span>
+                      {scope === 'all' && b.assignee && (
+                        <span className="plan-who" style={{ color: b.assignee_color }}>{b.assignee.split(' ')[0]}</span>
+                      )}
                       <span className="muted small">{Math.round(b.estimated_minutes / 6) / 10}h</span>
                     </div>
                   ))}

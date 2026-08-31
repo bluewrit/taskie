@@ -8,12 +8,20 @@ from datetime import date, datetime, timedelta
 DAILY_CAPACITY_MINUTES = 6 * 60  # 6h of realistic focus time per day
 
 
-def build_plan(db, horizon_days: int = 7, capacity_minutes: int = DAILY_CAPACITY_MINUTES) -> dict:
+def build_plan(db, horizon_days: int = 7, capacity_minutes: int = DAILY_CAPACITY_MINUTES,
+               user_id: int | None = None) -> dict:
+    """Schedule open tasks day-by-day. Personalised to user_id when given
+    (their tasks + unassigned ones)."""
+    from sqlalchemy import or_
+
     from ...models import Task
     from .recommender import compute_agent_score
 
     today = date.today()
-    open_tasks = db.query(Task).filter(Task.status != "done").all()
+    query = db.query(Task).filter(Task.status != "done")
+    if user_id is not None:
+        query = query.filter(or_(Task.assignee_id == user_id, Task.assignee_id.is_(None)))
+    open_tasks = query.all()
     for t in open_tasks:
         t.agent_score, t.agent_note = compute_agent_score(t, today)
     db.commit()
@@ -71,6 +79,8 @@ def build_plan(db, horizon_days: int = 7, capacity_minutes: int = DAILY_CAPACITY
                 "agent_score": t.agent_score,
                 "estimated_minutes": est,
                 "time": f"{cursor // 60:02d}:{cursor % 60:02d}",
+                "assignee": t.assignee.full_name if t.assignee else None,
+                "assignee_color": t.assignee.color if t.assignee else None,
                 "due_date": (t.due_date.date() if isinstance(t.due_date, datetime) else t.due_date).isoformat()
                 if t.due_date else None,
             })

@@ -6,6 +6,7 @@ const SUGGESTIONS = [
   'Plan my week',
   'How am I doing?',
   'Add task "Review PRs" due tomorrow high priority',
+  'Assign "Record demo video" to Ava',
 ];
 
 function ActionChips({ actions }) {

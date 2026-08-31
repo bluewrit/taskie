@@ -16,11 +16,31 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import UPLOAD_DIR, get_db
-from ..models import FileAttachment, Task
+from ..deps import get_current_user
+from ..models import AuthToken, FileAttachment, Task, User
 from ..schemas import FileOut
 from ..services import preview as preview_service
 
 router = APIRouter(prefix="/api", tags=["files"])
+
+
+def _stream_user(token: str | None, db: Session) -> User:
+    """Auth for <img>/<video>/<iframe>/download links that cannot set headers.
+
+    Accepts the same bearer token passed as ?token=... (session tokens are
+    short-lived; URLs are generated per-render and never shared).
+    """
+    from datetime import datetime
+
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    record = db.query(AuthToken).filter(AuthToken.token == token).first()
+    if not record or (record.expires_at and record.expires_at < datetime.utcnow()):
+        raise HTTPException(401, "Invalid or expired session")
+    user = db.get(User, record.user_id)
+    if not user:
+        raise HTTPException(401, "User no longer exists")
+    return user
 
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 
@@ -40,7 +60,8 @@ def _get_attachment(db: Session, file_id: int) -> FileAttachment:
 
 
 @router.post("/tasks/{task_id}/files", response_model=FileOut, status_code=201)
-async def upload_file(task_id: int, file: UploadFile, db: Session = Depends(get_db)):
+async def upload_file(task_id: int, file: UploadFile, db: Session = Depends(get_db),
+                      _: User = Depends(get_current_user)):
     if not db.get(Task, task_id):
         raise HTTPException(404, "Task not found")
     content = await file.read()
@@ -70,9 +91,11 @@ async def upload_file(task_id: int, file: UploadFile, db: Session = Depends(get_
 
 
 @router.get("/files/{file_id}/raw")
-def raw_file(file_id: int, range_header: str | None = Header(default=None, alias="Range"),
+def raw_file(file_id: int, token: str | None = None,
+             range_header: str | None = Header(default=None, alias="Range"),
              db: Session = Depends(get_db)):
     """Inline stream; honours Range requests so <video>/<audio> can seek."""
+    _stream_user(token, db)
     request_range = range_header
     att = _get_attachment(db, file_id)
     path = _stored_path(att)
@@ -116,7 +139,8 @@ def raw_file(file_id: int, range_header: str | None = Header(default=None, alias
 
 
 @router.get("/files/{file_id}/download")
-def download_file(file_id: int, db: Session = Depends(get_db)):
+def download_file(file_id: int, token: str | None = None, db: Session = Depends(get_db)):
+    _stream_user(token, db)
     from fastapi.responses import FileResponse
 
     att = _get_attachment(db, file_id)
@@ -128,7 +152,7 @@ def download_file(file_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/files/{file_id}/preview")
-def preview_file(file_id: int, db: Session = Depends(get_db)):
+def preview_file(file_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     att = _get_attachment(db, file_id)
     payload = preview_service.build_preview(_stored_path(att), att.filename, att.mime_type)
     payload["file_id"] = att.id
@@ -140,7 +164,7 @@ def preview_file(file_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/files/{file_id}", status_code=204)
-def delete_file(file_id: int, db: Session = Depends(get_db)):
+def delete_file(file_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     att = _get_attachment(db, file_id)
     try:
         _stored_path(att).unlink()

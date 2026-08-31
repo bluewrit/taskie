@@ -6,11 +6,15 @@ throughput, backlog health), assigns a grade and produces written feedback.
 from datetime import date, datetime, timedelta
 
 
-def evaluate(db) -> dict:
+def evaluate(db, user_id: int | None = None) -> dict:
+    """Performance report. Personalised to user_id when given (their tasks only)."""
     from ...models import Task
 
     today = date.today()
-    tasks = db.query(Task).all()
+    query = db.query(Task)
+    if user_id is not None:
+        query = query.filter(Task.assignee_id == user_id)
+    tasks = query.all()
     done = [t for t in tasks if t.status == "done"]
     open_tasks = [t for t in tasks if t.status != "done"]
 

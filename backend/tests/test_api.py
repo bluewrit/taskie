@@ -20,6 +20,20 @@ from app.main import app  # noqa: E402
 client = TestClient(app)
 
 
+def _auth_headers(username="tester", password="secret123"):
+    r = client.post("/api/auth/register", json={
+        "username": username, "password": password, "full_name": "Test User"})
+    if r.status_code == 409:  # already registered (repeat runs)
+        r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code in (200, 201), r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}, r.json()["user"]
+
+
+AUTH, ME = _auth_headers()
+client.headers.update(AUTH)
+TOKEN = AUTH["Authorization"].removeprefix("Bearer ")
+
+
 def _create_task(title="Test task", **kw):
     payload = {"title": title, "priority": kw.pop("priority", "medium"),
                "due_date": kw.pop("due_date", None), **kw}
@@ -69,7 +83,7 @@ def test_upload_and_text_preview():
     assert prev["kind"] == "text"
     assert prev["content"] == "hello world"
 
-    raw = client.get(f"/api/files/{fid}/raw")
+    raw = client.get(f"/api/files/{fid}/raw", params={"token": TOKEN})
     assert raw.status_code == 200
     assert raw.content == b"hello world"
     assert raw.headers["accept-ranges"] == "bytes"
@@ -144,7 +158,8 @@ def test_range_request_returns_206():
     t = _create_task("Range task")
     fid = client.post(f"/api/tasks/{t['id']}/files",
                       files={"file": ("blob.bin", bytes(range(256)), "application/octet-stream")}).json()["id"]
-    r = client.get(f"/api/files/{fid}/raw", headers={"Range": "bytes=10-19"})
+    r = client.get(f"/api/files/{fid}/raw", headers={"Range": "bytes=10-19"},
+                     params={"token": TOKEN})
     assert r.status_code == 206
     assert r.content == bytes(range(10, 20))
     assert r.headers["content-range"] == "bytes 10-19/256"
@@ -154,7 +169,7 @@ def test_download_forces_attachment():
     t = _create_task("Download task")
     fid = client.post(f"/api/tasks/{t['id']}/files",
                       files={"file": ("data.bin", b"\x00\x01", "application/octet-stream")}).json()["id"]
-    r = client.get(f"/api/files/{fid}/download")
+    r = client.get(f"/api/files/{fid}/download", params={"token": TOKEN})
     assert "attachment" in r.headers["content-disposition"]
 
 
@@ -189,6 +204,14 @@ def test_agent_create_task_bare_weekday_due_date():
     expected = today + _td(days=(4 - today.weekday()) % 7 or 7)
     assert created["due_date"] == expected.isoformat()
     client.delete(f"/api/tasks/{created['task_id']}")  # cleanup
+
+
+def test_chat_preserves_title_casing():
+    r = client.post("/api/agent/chat", json={
+        "message": 'add task "QA pass on Previews" due tomorrow'})
+    created = [a for a in r.json()["actions"] if a["tool"] == "create_task"][0]["result"]
+    assert created["title"] == "QA pass on Previews"
+    client.delete(f"/api/tasks/{created['task_id']}")
 
 
 def test_agent_complete_task_via_chat():
@@ -234,3 +257,96 @@ def test_agent_actions_logged():
     r = client.get("/api/agent/actions")
     kinds = {a["kind"] for a in r.json()}
     assert "chat" in kinds
+
+
+# ------------------------------------------------------------------ auth & users
+def test_unauthenticated_requests_rejected():
+    anon = TestClient(app)
+    assert anon.get("/api/tasks").status_code == 401
+    assert anon.get("/api/agent/recommendations").status_code == 401
+    assert anon.post("/api/tasks", json={"title": "nope"}).status_code == 401
+
+
+def test_login_wrong_password():
+    anon = TestClient(app)
+    r = anon.post("/api/auth/login", json={"username": "tester", "password": "wrong"})
+    assert r.status_code == 401
+
+
+def test_login_and_me_roundtrip():
+    anon = TestClient(app)
+    r = anon.post("/api/auth/login", json={"username": "tester", "password": "secret123"})
+    assert r.status_code == 200
+    token = r.json()["token"]
+    me = anon.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).json()
+    assert me["username"] == "tester"
+    assert me["color"].startswith("#")
+
+
+def test_register_duplicate_username():
+    anon = TestClient(app)
+    r = anon.post("/api/auth/register", json={"username": "tester", "password": "abcd1234"})
+    assert r.status_code == 409
+
+
+def test_users_list_and_stats():
+    users = client.get("/api/users").json()
+    assert any(u["username"] == "tester" for u in users)
+    stats = client.get("/api/users/stats").json()
+    assert any(s["username"] == "tester" for s in stats)
+    assert all({"open", "overdue", "done_7d", "load_minutes"} <= set(s) for s in stats)
+
+
+def test_create_teammate_and_delete():
+    r = client.post("/api/users", json={"username": "temp.mate", "password": "temp1234",
+                                        "full_name": "Temp Mate"})
+    assert r.status_code == 201
+    uid = r.json()["id"]
+    assert client.delete(f"/api/users/{uid}").status_code == 204
+
+
+def test_task_assignment_and_filters():
+    mate = client.post("/api/users", json={"username": "assignee1", "password": "temp1234"}).json()
+    t = _create_task("Assigned work", assignee_id=mate["id"])
+    assert t["assignee"]["username"] == "assignee1"
+
+    mine = client.get("/api/tasks", params={"mine": True}).json()
+    assert all(x["assignee"] and x["assignee"]["id"] == ME["id"] for x in mine if x["assignee"])
+
+    theirs = client.get("/api/tasks", params={"assignee_id": mate["id"]}).json()
+    assert [x["id"] for x in theirs] == [t["id"]]
+
+    # unassign
+    r = client.put(f"/api/tasks/{t['id']}", json={"assignee_id": None})
+    assert r.json()["assignee"] is None
+
+    # invalid assignee rejected
+    assert client.post("/api/tasks", json={"title": "x", "assignee_id": 99999}).status_code == 422
+    client.delete(f"/api/users/{mate['id']}")
+
+
+def test_chat_assigns_to_me_by_default():
+    r = client.post("/api/agent/chat", json={"message": 'add task "My personal errand" due tomorrow'})
+    created = [a for a in r.json()["actions"] if a["tool"] == "create_task"][0]["result"]
+    assert created["created"]
+    task = client.get(f"/api/tasks/{created['task_id']}").json()
+    assert task["assignee"]["id"] == ME["id"]
+    client.delete(f"/api/tasks/{created['task_id']}")
+
+
+def test_chat_assign_to_teammate_by_name():
+    mate = client.post("/api/users", json={"username": "zoe", "password": "temp1234",
+                                           "full_name": "Zoe Quinn"}).json()
+    r = client.post("/api/agent/chat",
+                    json={"message": 'add task "Design review" assign to Zoe Quinn due tomorrow'})
+    created = [a for a in r.json()["actions"] if a["tool"] == "create_task"][0]["result"]
+    task = client.get(f"/api/tasks/{created['task_id']}").json()
+    assert task["assignee"]["username"] == "zoe"
+    client.delete(f"/api/tasks/{created['task_id']}")
+    client.delete(f"/api/users/{mate['id']}")
+
+
+def test_evaluation_scope_mine_vs_all():
+    mine = client.get("/api/agent/evaluation", params={"scope": "mine"}).json()
+    everything = client.get("/api/agent/evaluation", params={"scope": "all"}).json()
+    assert mine["metrics"]["total_tasks"] <= everything["metrics"]["total_tasks"]

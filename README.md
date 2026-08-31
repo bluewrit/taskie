@@ -6,6 +6,17 @@ A full-stack task management system with **file upload & preview for every file 
 
 ## Features
 
+### 👤 Users & personalised assignment
+- **Accounts**: register / login with PBKDF2-hashed passwords and bearer-token sessions
+- **Team management**: create teammates, view per-person workload (open, WIP, overdue,
+  focus load, weekly throughput) and their top tasks
+- **Task assignment**: every task has an owner; filter the board/list by *My tasks*,
+  *Unassigned*, or any teammate; new tasks default to you
+- **Personalised agent**: recommendations, plans and evaluations are scoped to *your*
+  assigned work (with a "whole team" scope toggle), and chat commands like
+  *"assign QA pass to Ben"* route work to the right person
+- Demo accounts on first start: `demo`, `ava`, `ben` — password `taskie123`
+
 ### 🗂 Task management
 - Projects + tasks with status (to do / in progress / blocked / done), priority, due dates,
   estimates, progress, and tags
@@ -58,7 +69,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+Open http://localhost:5173 and sign in with `demo` / `taskie123`
+(accounts are created automatically on first start; register your own from the sign-in screen).
 
 ## Tests
 
@@ -72,4 +84,5 @@ cd backend && .venv/bin/python -m pytest tests/ -q
 |---|---|
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2 (SQLite), python-docx / openpyxl / python-pptx / pypdf |
 | Frontend | React 18, Vite 5, hand-rolled SVG charts, zero UI framework |
+| Auth | PBKDF2-SHA256 password hashing (stdlib), bearer-token sessions, per-endpoint enforcement |
 | AI | Deterministic agent engine (NLU + tool-calling loop) with optional OpenAI-compatible LLM |

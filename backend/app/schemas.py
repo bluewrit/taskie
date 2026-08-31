@@ -4,6 +4,42 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# ---------------------------------------------------------------- Users / Auth
+class RegisterIn(BaseModel):
+    username: str = Field(min_length=3, max_length=60, pattern=r"^[a-zA-Z0-9_.-]+$")
+    password: str = Field(min_length=4, max_length=200)
+    full_name: str = Field(default="", max_length=120)
+    email: str = Field(default="", max_length=160)
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    full_name: str
+    email: str
+    color: str
+    role: str
+    created_at: datetime
+
+
+class AuthOut(BaseModel):
+    token: str
+    user: UserOut
+
+
+class UserCreateIn(BaseModel):
+    username: str = Field(min_length=3, max_length=60, pattern=r"^[a-zA-Z0-9_.-]+$")
+    password: str = Field(min_length=4, max_length=200)
+    full_name: str = Field(default="", max_length=120)
+    email: str = Field(default="", max_length=160)
+
+
 # ---------------------------------------------------------------- Projects
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
@@ -22,6 +58,7 @@ class TaskIn(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     description: str = ""
     project_id: int | None = None
+    assignee_id: int | None = None
     status: str = "todo"
     priority: str = "medium"
     due_date: date | None = None
@@ -34,6 +71,7 @@ class TaskUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     project_id: int | None = None
+    assignee_id: int | None = None
     status: str | None = None
     priority: str | None = None
     due_date: date | None = None
@@ -60,6 +98,7 @@ class TaskOut(TaskIn):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    assignee: UserOut | None = None
     files: list[FileOut] = []
 
 

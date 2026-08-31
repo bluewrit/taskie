@@ -55,8 +55,11 @@ def _workspace_context(db) -> dict:
 
 
 # ------------------------------------------------------------------ brain
-def run(db, message: str) -> dict:
-    """Full agent loop for one user message. Returns reply + trace."""
+def run(db, message: str, user=None) -> dict:
+    """Full agent loop for one user message. Returns reply + trace.
+
+    `user` (a models.User) personalises the loop: created tasks default to
+    them, listings/plans/recommendations/evaluations scope to their work."""
     reasoning = []
 
     # PERCEIVE
@@ -75,12 +78,22 @@ def run(db, message: str) -> dict:
         if not title:
             return _reply("I couldn't find a task name in that. Try: “add task Review Q3 report due friday high priority”.",
                           reasoning, [])
+        assignee_id = user.id if user else None
+        if entities.get("assignee_name"):
+            from .tools import resolve_user
+            target = resolve_user(db, entities["assignee_name"])
+            if target:
+                assignee_id = target.id
+                reasoning.append(f"Resolved assignee '{entities['assignee_name']}' → {target.full_name}.")
+            else:
+                reasoning.append(f"No user matches '{entities['assignee_name']}' — leaving it to you.")
         args = {
             "title": title,
             "priority": entities.get("priority", "medium"),
             "due_date": entities.get("due_date"),
             "estimated_minutes": entities.get("estimated_minutes", 60),
             "project_name": entities.get("project_name"),
+            "assignee_id": assignee_id,
         }
         plan.append(("create_task", args))
         reasoning.append(
@@ -98,23 +111,24 @@ def run(db, message: str) -> dict:
         plan.append(("update_task", entities))
         reasoning.append("Planned update_task.")
     elif intent == "list_tasks":
-        plan.append(("list_tasks", {"status": entities.get("status"), "limit": 10}))
-        reasoning.append("Planned list_tasks to summarise the backlog.")
+        plan.append(("list_tasks", {"status": entities.get("status"), "limit": 10,
+                                    "assignee_id": user.id if user else None}))
+        reasoning.append("Planned list_tasks to summarise your assigned backlog.")
     elif intent == "next_task":
-        plan.append(("recommendations", {}))
-        reasoning.append("Planned recommendations to pick the highest-leverage next action.")
+        plan.append(("recommendations", {"user_id": user.id if user else None}))
+        reasoning.append("Planned recommendations to pick your highest-leverage next action.")
     elif intent == "plan":
         horizon = nlp.horizon_days(message)
-        plan.append(("plan", {"horizon_days": horizon}))
+        plan.append(("plan", {"horizon_days": horizon, "user_id": user.id if user else None}))
         reasoning.append(f"Planned plan(horizon_days={horizon}).")
     elif intent == "evaluate":
-        plan.append(("evaluate", {}))
-        reasoning.append("Planned evaluate to grade performance.")
+        plan.append(("evaluate", {"user_id": user.id if user else None}))
+        reasoning.append("Planned evaluate to grade your performance.")
     elif intent == "recommend":
-        plan.append(("recommendations", {}))
+        plan.append(("recommendations", {"user_id": user.id if user else None}))
         reasoning.append("Planned recommendations.")
     elif intent == "greeting":
-        return _reply(_greeting(context), reasoning, [])
+        return _reply(_greeting(context, user), reasoning, [])
     else:
         return _reply(_fallback(context), reasoning, [])
 
@@ -139,9 +153,10 @@ def _reply(reply, reasoning, actions):
     return {"reply": reply, "reasoning": reasoning, "actions": actions}
 
 
-def _greeting(ctx):
+def _greeting(ctx, user=None):
+    name = (user.full_name or user.username).split()[0] if user else "there"
     return (
-        f"Hey! I'm your task agent. You have {ctx['open_tasks']} open task(s)"
+        f"Hey {name}! I'm your task agent. Your workspace has {ctx['open_tasks']} open task(s)"
         f"{f', {ctx[chr(100)+chr(117)+chr(101)+chr(95)+chr(116)+chr(111)+chr(100)+chr(97)+chr(121)]} due today' if ctx['due_today'] else ''}. "
         "Try: “add task Fix login bug due tomorrow high priority”, “what should I do next?”, "
         "“plan my week”, or “how am I doing?”."
@@ -163,8 +178,9 @@ def _compose(intent, results, ctx) -> str:
         r = results["create_task"]
         if r.get("created"):
             due = f", due {r['due_date']}" if r.get("due_date") else ""
+            who = f", assigned to {r['assignee']}" if r.get("assignee") and r["assignee"] != "unassigned" else ""
             return (f"✅ Created task #{r['task_id']} “{r['title']}” "
-                    f"[{r['priority']} priority{due}]. I'll factor it into your next plan.")
+                    f"[{r['priority']} priority{due}{who}]. I'll factor it into your next plan.")
         return f"⚠️ Could not create the task: {r.get('error')}"
 
     if intent == "complete_task":
@@ -236,7 +252,7 @@ def _compose(intent, results, ctx) -> str:
 
 
 # ------------------------------------------------------------------ LLM mode
-def run_llm(db, message: str) -> dict:
+def run_llm(db, message: str, user=None) -> dict:
     """LLM-powered variant of the loop (OpenAI-compatible function calling)."""
     api_key = os.environ["OPENAI_API_KEY"]
     base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
@@ -289,12 +305,12 @@ def run_llm(db, message: str) -> dict:
     return {"reply": "I've completed a series of actions — see the list.", "reasoning": reasoning, "actions": actions}
 
 
-def chat(db, message: str) -> dict:
+def chat(db, message: str, user=None) -> dict:
     if llm_configured():
         try:
-            return run_llm(db, message)
+            return run_llm(db, message, user)
         except Exception as exc:  # fall back to built-in engine
-            fallback = run(db, message)
+            fallback = run(db, message, user)
             fallback["reasoning"].insert(0, f"LLM call failed ({exc}); used built-in engine.")
             return fallback
-    return run(db, message)
+    return run(db, message, user)

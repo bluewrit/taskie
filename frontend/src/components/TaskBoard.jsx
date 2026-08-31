@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api, STATUS_LABELS, fmtDate } from '../api.js';
+import Avatar from './Avatar.jsx';
 
 const COLUMNS = ['todo', 'in_progress', 'blocked', 'done'];
 
@@ -7,13 +8,14 @@ function TaskCard({ task, onOpen, onDragStart }) {
   const today = new Date().toISOString().slice(0, 10);
   const overdue = task.due_date && task.due_date < today && task.status !== 'done';
   return (
-    <div className="card" draggable onDragStart={(e) => onDragStart(e, task)} onClick={() => onOpen(task)}>
+    <div className={`card card-${task.priority}`} draggable onDragStart={(e) => onDragStart(e, task)} onClick={() => onOpen(task)}>
       <div className="card-top">
         <span className={`pill pill-${task.priority}`}>{task.priority}</span>
         {task.files?.length > 0 && <span className="clip" title={`${task.files.length} file(s)`}>📎{task.files.length}</span>}
       </div>
       <div className="card-title">{task.title}</div>
       <div className="card-meta">
+        <Avatar user={task.assignee} size={20} />
         <span className={`due ${overdue ? 'due-overdue' : ''}`}>{task.due_date ? fmtDate(task.due_date) : '—'}</span>
         {task.progress > 0 && task.status !== 'done' && (
           <span className="progress-mini"><span style={{ width: `${task.progress}%` }} /></span>
@@ -24,7 +26,7 @@ function TaskCard({ task, onOpen, onDragStart }) {
   );
 }
 
-export default function TaskBoard({ tasks, projects, onChanged, onOpenTask, onNew, notify }) {
+export default function TaskBoard({ tasks, onChanged, onOpenTask, onNew, notify }) {
   const [dragOver, setDragOver] = useState(null);
 
   const move = async (task, status) => {

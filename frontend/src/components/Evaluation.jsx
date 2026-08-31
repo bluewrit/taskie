@@ -25,10 +25,14 @@ function ThroughputChart({ data }) {
   );
 }
 
-export default function Evaluation() {
+export default function Evaluation({ me }) {
   const [ev, setEv] = useState(null);
+  const [scope, setScope] = useState('mine');
 
-  useEffect(() => { api.agentEvaluation().then(setEv).catch(() => {}); }, []);
+  useEffect(() => {
+    setEv(null);
+    api.agentEvaluation(scope).then(setEv).catch(() => {});
+  }, [scope]);
 
   if (!ev) return <div className="view"><p className="muted">Crunching numbers…</p></div>;
   const m = ev.metrics;
@@ -38,7 +42,11 @@ export default function Evaluation() {
       <header className="view-header">
         <div>
           <h1>Evaluation</h1>
-          <p className="muted">How your workflow is performing, graded by the agent.</p>
+          <p className="muted">{scope === 'mine' ? 'How your workflow is performing' : 'How the whole team is performing'}, graded by the agent.</p>
+        </div>
+        <div className="scope-toggle eval-scope">
+          <button className={scope === 'mine' ? 'active' : ''} onClick={() => setScope('mine')}>Me</button>
+          <button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>Whole team</button>
         </div>
         <div className="grade-big">
           <span className={`grade-letter grade-${ev.grade}`}>{ev.grade}</span>

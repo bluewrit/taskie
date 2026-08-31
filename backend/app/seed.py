@@ -238,6 +238,23 @@ def seed(force: bool = False):
         db.add_all(tasks)
         db.commit()
 
+        # assign tasks across the demo team (a couple stay unassigned on purpose)
+        from .models import User
+        users = {u.username: u for u in db.query(User).all()}
+        demo = users.get("demo")
+        ava = users.get("ava")
+        ben = users.get("ben")
+        assignments = [
+            (tasks[0], demo), (tasks[1], demo), (tasks[2], None),
+            (tasks[3], ava), (tasks[4], ava), (tasks[5], ava),
+            (tasks[6], demo), (tasks[7], ben), (tasks[8], ben),
+            (tasks[9], ben), (tasks[10], None),
+        ]
+        for t, u in assignments:
+            if u:
+                t.assignee_id = u.id
+        db.commit()
+
         # attach sample files across a few tasks
         plan = [
             (tasks[0], ["Q3-product-review.docx", "sample-report.pdf", "notes.md"]),

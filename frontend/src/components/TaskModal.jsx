@@ -1,33 +1,38 @@
 import React, { useRef, useState } from 'react';
-import { api, STATUS_LABELS, fmtBytes, fmtDate } from '../api.js';
+import { api, STATUS_LABELS, fmtBytes, mediaUrl } from '../api.js';
+import Avatar from './Avatar.jsx';
 
 const EMPTY = {
-  title: '', description: '', project_id: '', status: 'todo',
+  title: '', description: '', project_id: '', assignee_id: '', status: 'todo',
   priority: 'medium', due_date: '', estimated_minutes: 60, progress: 0, tags: '',
 };
 
-export default function TaskModal({ task, projects, onClose, onSaved, onPreview, notify }) {
+export default function TaskModal({ task, projects, users, me, onClose, onSaved, onPreview, notify }) {
   const isNew = !task;
   const [form, setForm] = useState(() =>
-    task ? { ...task, project_id: task.project_id ?? '', due_date: task.due_date ?? '' } : { ...EMPTY });
+    task
+      ? { ...task, project_id: task.project_id ?? '', assignee_id: task.assignee_id ?? '', due_date: task.due_date ?? '' }
+      : { ...EMPTY, assignee_id: me?.id ?? '' }); // new tasks default to me
   const [files, setFiles] = useState(task?.files ?? []);
   const [dragging, setDragging] = useState(false);
   const [upload, setUpload] = useState(null); // {name, pct}
   const inputRef = useRef(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  const payload = () => ({
+    ...form,
+    project_id: form.project_id === '' ? null : Number(form.project_id),
+    assignee_id: form.assignee_id === '' ? null : Number(form.assignee_id),
+    due_date: form.due_date || null,
+    estimated_minutes: Number(form.estimated_minutes) || 60,
+    progress: Number(form.progress) || 0,
+  });
+
   const save = async () => {
     if (!form.title.trim()) return notify('Title is required', 'err');
-    const payload = {
-      ...form,
-      project_id: form.project_id === '' ? null : Number(form.project_id),
-      due_date: form.due_date || null,
-      estimated_minutes: Number(form.estimated_minutes) || 60,
-      progress: Number(form.progress) || 0,
-    };
     try {
-      if (isNew) await api.createTask(payload);
-      else await api.updateTask(task.id, payload);
+      if (isNew) await api.createTask(payload());
+      else await api.updateTask(task.id, payload());
       onSaved();
     } catch (e) { notify(e.message, 'err'); }
   };
@@ -35,27 +40,6 @@ export default function TaskModal({ task, projects, onClose, onSaved, onPreview,
   const remove = async () => {
     if (!confirm(`Delete task “${task.title}”?`)) return;
     try { await api.deleteTask(task.id); onSaved(); } catch (e) { notify(e.message, 'err'); }
-  };
-
-  const doUpload = async (fileList) => {
-    if (isNew) {
-      // save first so we have an id
-      if (!form.title.trim()) return notify('Give the task a title before attaching files', 'err');
-      const payload = {
-        ...form,
-        project_id: form.project_id === '' ? null : Number(form.project_id),
-        due_date: form.due_date || null,
-        estimated_minutes: Number(form.estimated_minutes) || 60,
-        progress: Number(form.progress) || 0,
-      };
-      try {
-        const created = await api.createTask(payload);
-        for (const f of fileList) await uploadTo(created.id, f);
-        onSaved();
-      } catch (e) { notify(e.message, 'err'); }
-      return;
-    }
-    for (const f of fileList) await uploadTo(task.id, f);
   };
 
   const uploadTo = async (taskId, file) => {
@@ -66,6 +50,19 @@ export default function TaskModal({ task, projects, onClose, onSaved, onPreview,
       notify(`Uploaded ${file.name}`);
     } catch (e) { notify(e.message, 'err'); }
     setUpload(null);
+  };
+
+  const doUpload = async (fileList) => {
+    if (isNew) {
+      if (!form.title.trim()) return notify('Give the task a title before attaching files', 'err');
+      try {
+        const created = await api.createTask(payload());
+        for (const f of fileList) await uploadTo(created.id, f);
+        onSaved();
+      } catch (e) { notify(e.message, 'err'); }
+      return;
+    }
+    for (const f of fileList) await uploadTo(task.id, f);
   };
 
   const removeFile = async (fid) => {
@@ -84,10 +81,20 @@ export default function TaskModal({ task, projects, onClose, onSaved, onPreview,
         </div>
 
         <div className="modal-body">
-          <input className="input" placeholder="Task title" value={form.title} onChange={set('title')} autoFocus />
+          <input className="input input-title" placeholder="Task title" value={form.title} onChange={set('title')} autoFocus />
           <textarea className="input" rows={3} placeholder="Description…" value={form.description} onChange={set('description')} />
 
           <div className="form-grid">
+            <label>Assignee
+              <select className="input" value={form.assignee_id} onChange={set('assignee_id')}>
+                <option value="">— Unassigned —</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name || u.username}{u.id === me?.id ? ' (me)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>Project
               <select className="input" value={form.project_id} onChange={set('project_id')}>
                 <option value="">— None —</option>
@@ -110,16 +117,18 @@ export default function TaskModal({ task, projects, onClose, onSaved, onPreview,
             <label>Estimate (min)
               <input type="number" min="5" step="5" className="input" value={form.estimated_minutes} onChange={set('estimated_minutes')} />
             </label>
-            <label>Progress ({form.progress}%)
-              <input type="range" min="0" max="100" step="5" value={form.progress} onChange={set('progress')} />
-            </label>
           </div>
+
+          <label className="range-row">Progress <strong>{form.progress}%</strong>
+            <input type="range" min="0" max="100" step="5" value={form.progress} onChange={set('progress')} />
+          </label>
 
           <input className="input" placeholder="tags, comma, separated" value={form.tags} onChange={set('tags')} />
 
           {!isNew && (
             <div className="agent-note">
               🤖 Agent score <strong>{Math.round(task.agent_score)}/100</strong> — {task.agent_note || 'not scored yet'}
+              {task.assignee && <> · assigned to <strong>{task.assignee.full_name || task.assignee.username}</strong></>}
             </div>
           )}
 
@@ -146,7 +155,7 @@ export default function TaskModal({ task, projects, onClose, onSaved, onPreview,
                     <span className="file-name">{f.filename}</span>
                     <span className="muted small">{fmtBytes(f.size)}</span>
                   </button>
-                  <a className="btn btn-ghost btn-sm" href={`/api/files/${f.id}/download`} title="Download">⬇</a>
+                  <a className="btn btn-ghost btn-sm" href={mediaUrl(`/api/files/${f.id}/download`)} title="Download">⬇</a>
                   <button className="btn btn-ghost btn-sm danger" title="Delete" onClick={() => removeFile(f.id)}>✕</button>
                 </li>
               ))}

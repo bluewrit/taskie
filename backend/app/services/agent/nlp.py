@@ -162,11 +162,16 @@ def extract_entities(text: str) -> dict:
         value = float(m.group(1))
         ents["estimated_minutes"] = int(value * 60) if m.group(2)[0] == "h" else int(value)
 
+    # Titles: match on the lowercased text but slice from the ORIGINAL so
+    # the user's capitalisation survives ("QA pass" stays "QA pass").
+    def orig(m, group=1):
+        return text[m.start(group):m.end(group)]
+
     m = re.search(r'\b(?:called|named|titled)\s+["\'](.+?)["\']', low)
     if not m:
         m = re.search(r'["\'](.+?)["\']', low)
     if m:
-        ents["title"] = m.group(1).strip()
+        ents["title"] = orig(m).strip()
     else:
         m = re.search(
             r"\b(?:add|create|make|new)\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?task\s+(?:called|named|titled|for|:)\s*(.+?)"
@@ -174,15 +179,17 @@ def extract_entities(text: str) -> dict:
             low,
         )
         if m:
-            ents["title"] = re.sub(r"[.!?]+$", "", m.group(1)).strip()
+            ents["title"] = re.sub(r"[.!?]+$", "", orig(m)).strip()
         else:
             m = re.search(r"\b(?:remind me to|remember to|add|schedule)\s+(.+?)$", low)
             if m:
-                title = re.sub(r"[.!?]+$", "", m.group(1)).strip()
-                title = re.sub(r"\s+due\s+.*$", "", title)
-                title = re.sub(r"\s+(by|on|before|tomorrow|today|next week)\s*$", "", title)
-                if len(title) > 4 and title not in ("task", "a task", "my tasks"):
+                title = re.sub(r"[.!?]+$", "", orig(m)).strip()
+                title = re.sub(r"\s+(?i:due)\s+.*$", "", title)
+                title = re.sub(r"\s+(?i:by|on|before|tomorrow|today|next week)\s*$", "", title)
+                if len(title) > 4 and title.lower() not in ("task", "a task", "my tasks"):
                     ents["title"] = title
+                else:
+                    ents.pop("title", None)
 
     if "title" in ents:
         ents["title"] = ents["title"][0].upper() + ents["title"][1:]
@@ -190,6 +197,14 @@ def extract_entities(text: str) -> dict:
     m = re.search(r"\b(?:for|in)\s+(?:the\s+)?([a-z][a-z0-9 _-]{2,30}?)\s+project\b", low)
     if m:
         ents["project_name"] = m.group(1).strip().lower()
+
+    m = re.search(r"\bassign(?:ed|ing)?\s+(?:it\s+)?to\s+([a-z][a-z0-9 ._-]{1,40}?)(?:\s+(?:due|by|on|with|and|priority|tomorrow|today|next)\b.*|$)", low)
+    if m:
+        name = m.group(1).strip().rstrip(".")
+        if name not in ("me", "myself", "i"):
+            ents["assignee_name"] = name
+        else:
+            ents["assignee_self"] = True
 
     return ents
 

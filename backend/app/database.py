@@ -31,7 +31,49 @@ def get_db():
         db.close()
 
 
+def _migrate():
+    """Lightweight additive migrations for pre-existing databases."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "tasks" in inspector.get_table_names():
+        columns = {c["name"] for c in inspector.get_columns("tasks")}
+        if "assignee_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE tasks ADD COLUMN assignee_id INTEGER REFERENCES users(id)"
+                ))
+
+
 def init_db():
     from . import models  # noqa: F401  (register mappers)
 
     Base.metadata.create_all(bind=engine)
+    _migrate()
+    _ensure_demo_users()
+
+
+def _ensure_demo_users():
+    """Create default accounts on first start so the app is usable immediately."""
+    from . import security
+    from .models import User
+
+    palette = ["#6366f1", "#10b981", "#f59e0b", "#ec4899", "#38bdf8"]
+    defaults = [
+        ("demo", "Demo User", "admin"),
+        ("ava", "Ava Sharma", "member"),
+        ("ben", "Ben Carter", "member"),
+    ]
+    with SessionLocal() as db:
+        existing = {u.username for u in db.query(User).all()}
+        for i, (username, full_name, role) in enumerate(defaults):
+            if username in existing:
+                continue
+            db.add(User(
+                username=username,
+                full_name=full_name,
+                password_hash=security.hash_password("taskie123"),
+                color=palette[i % len(palette)],
+                role=role,
+            ))
+        db.commit()

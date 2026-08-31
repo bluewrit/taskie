@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, fmtBytes } from '../api.js';
+import { api, fmtBytes, mediaUrl } from '../api.js';
 
 function Table({ columns, rows }) {
   return (
@@ -34,7 +34,7 @@ export default function FilePreview({ fileId, onClose }) {
             {data && <span className="muted small"> · {fmtBytes(data.size)} · {data.kind}</span>}
           </h2>
           <div className="modal-head-actions">
-            {data && <a className="btn btn-ghost btn-sm" href={data.download_url}>⬇ Download</a>}
+            {data && <a className="btn btn-ghost btn-sm" href={mediaUrl(data.download_url)}>⬇ Download</a>}
             <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
           </div>
         </div>
@@ -44,12 +44,12 @@ export default function FilePreview({ fileId, onClose }) {
           {!data && !error && <p className="muted">Loading preview…</p>}
 
           {data?.kind === 'image' && (
-            <div className="preview-center"><img className="preview-image" src={data.raw_url} alt={data.filename} /></div>
+            <div className="preview-center"><img className="preview-image" src={mediaUrl(data.raw_url)} alt={data.filename} /></div>
           )}
 
           {data?.kind === 'pdf' && (
             <>
-              <iframe className="preview-pdf" src={data.raw_url} title={data.filename} />
+              <iframe className="preview-pdf" src={mediaUrl(data.raw_url)} title={data.filename} />
               {data.extracted_text && (
                 <details className="extracted" open={false}>
                   <summary>Extracted text</summary>
@@ -60,13 +60,13 @@ export default function FilePreview({ fileId, onClose }) {
           )}
 
           {data?.kind === 'video' && (
-            <div className="preview-center"><video className="preview-video" src={data.raw_url} controls autoPlay={false} /></div>
+            <div className="preview-center"><video className="preview-video" src={mediaUrl(data.raw_url)} controls autoPlay={false} /></div>
           )}
 
           {data?.kind === 'audio' && (
             <div className="preview-center preview-audio-wrap">
               <div className="audio-icon">🎵</div>
-              <audio src={data.raw_url} controls />
+              <audio src={mediaUrl(data.raw_url)} controls />
             </div>
           )}
 
@@ -112,7 +112,7 @@ export default function FilePreview({ fileId, onClose }) {
             <div className="preview-center">
               <div className="big-file-icon">📄</div>
               <p className="muted">No inline preview for this file type — but you can still download it.</p>
-              <a className="btn btn-primary" href={data.download_url}>⬇ Download {data.filename}</a>
+              <a className="btn btn-primary" href={mediaUrl(data.download_url)}>⬇ Download {data.filename}</a>
             </div>
           )}
         </div>

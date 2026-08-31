@@ -49,14 +49,21 @@ def compute_agent_score(task, today: date | None = None) -> tuple[float, str]:
     return round(min(score, 100.0), 1), ", ".join(reasons) or "normal priority"
 
 
-def generate_recommendations(db) -> list[dict]:
-    """Return a ranked list of recommendation dicts."""
+def generate_recommendations(db, user_id: int | None = None) -> list[dict]:
+    """Return a ranked list of recommendation dicts.
+
+    When user_id is given the analysis is personalised: tasks assigned to that
+    user plus unassigned tasks (which the agent nudges to allocate).
+    """
+    from sqlalchemy import or_
+
     from ...models import Task
 
     today = date.today()
-    open_tasks = (
-        db.query(Task).filter(Task.status != "done").order_by(Task.id).all()
-    )
+    query = db.query(Task).filter(Task.status != "done")
+    if user_id is not None:
+        query = query.filter(or_(Task.assignee_id == user_id, Task.assignee_id.is_(None)))
+    open_tasks = query.order_by(Task.id).all()
     done_recent = (
         db.query(Task)
         .filter(Task.status == "done", Task.completed_at != None)  # noqa: E711
@@ -155,6 +162,17 @@ def generate_recommendations(db) -> list[dict]:
             f"{len(no_due)} open tasks have no due date",
             "Undated tasks rarely get done. Give each one a date (the planner can do it for you).",
             score=30)
+
+    # 6b. Personalised: unassigned tasks in my workspace
+    unassigned = [t for t in open_tasks if t.assignee_id is None]
+    if user_id is not None and unassigned:
+        names = ", ".join(t.title for t in unassigned[:3])
+        add("unassigned", "medium",
+            f"{len(unassigned)} task(s) have no owner",
+            f"Assign them so they don't slip through the cracks ({names}).",
+            task_id=unassigned[0].id,
+            action={"kind": "assign_me", "task_id": unassigned[0].id, "assignee_id": user_id},
+            score=50)
 
     # 7. Encouragement / momentum
     if len(done_recent) >= 3:

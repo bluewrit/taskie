@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import init_db
-from .routers import agent, files, tasks
+from .routers import agent, auth, files, tasks, users
 
 init_db()
 
@@ -18,6 +18,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(tasks.router)
 app.include_router(files.router)
 app.include_router(agent.router)

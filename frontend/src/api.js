@@ -1,37 +1,81 @@
 // Thin API client for the Taskie backend (proxied at /api by Vite).
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
+// Session tokens live in localStorage; every request carries the bearer token.
+const TOKEN_KEY = 'taskie_token';
+
+let token = localStorage.getItem(TOKEN_KEY) || null;
+
+export function setToken(t) {
+  token = t;
+  if (t) localStorage.setItem(TOKEN_KEY, t);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+export function getToken() { return token; }
+
+/** Media/download URLs are loaded by <img>/<video>/<iframe>/<a>, which cannot
+ *  set headers — those endpoints accept the session token as a query param. */
+export function mediaUrl(url) {
+  if (!url || !token) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+}
+
+function authHeaders(extra) {
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };
+}
 
 async function handle(res) {
   if (!res.ok) {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || JSON.stringify(body);
+      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail ?? body);
     } catch { /* ignore */ }
-    throw new Error(`${res.status}: ${detail}`);
+    if (res.status === 401 && token) {
+      setToken(null);
+      window.dispatchEvent(new Event('taskie:unauthorized'));
+    }
+    throw new Error(detail);
   }
   if (res.status === 204) return null;
   return res.json();
 }
 
-export const api = {
-  health: () => fetch('/api/health').then(handle),
+const get = (url) => fetch(url, { headers: authHeaders() }).then(handle);
+const send = (url, method, data) => fetch(url, {
+  method,
+  headers: authHeaders({ 'Content-Type': 'application/json' }),
+  body: data === undefined ? undefined : JSON.stringify(data),
+}).then(handle);
 
-  listProjects: () => fetch('/api/projects').then(handle),
-  createProject: (data) => fetch('/api/projects', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }).then(handle),
-  deleteProject: (id) => fetch(`/api/projects/${id}`, { method: 'DELETE' }).then(handle),
+export const api = {
+  // ---- auth
+  register: (data) => send('/api/auth/register', 'POST', data),
+  login: (data) => send('/api/auth/login', 'POST', data),
+  logout: () => send('/api/auth/logout', 'POST'),
+  me: () => get('/api/auth/me'),
+
+  // ---- team
+  listUsers: () => get('/api/users'),
+  createUser: (data) => send('/api/users', 'POST', data),
+  deleteUser: (id) => send(`/api/users/${id}`, 'DELETE'),
+  userStats: () => get('/api/users/stats'),
+
+  // ---- workspace
+  health: () => fetch('/api/health').then(handle),
+  listProjects: () => get('/api/projects'),
+  createProject: (data) => send('/api/projects', 'POST', data),
+  deleteProject: (id) => send(`/api/projects/${id}`, 'DELETE'),
 
   listTasks: (params = {}) => {
-    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString();
-    return fetch(`/api/tasks${qs ? `?${qs}` : ''}`).then(handle);
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null && v !== false)).toString();
+    return get(`/api/tasks${qs ? `?${qs}` : ''}`);
   },
-  createTask: (data) => fetch('/api/tasks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }).then(handle),
-  updateTask: (id, data) => fetch(`/api/tasks/${id}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(data) }).then(handle),
-  completeTask: (id) => fetch(`/api/tasks/${id}/complete`, { method: 'POST' }).then(handle),
-  deleteTask: (id) => fetch(`/api/tasks/${id}`, { method: 'DELETE' }).then(handle),
+  createTask: (data) => send('/api/tasks', 'POST', data),
+  updateTask: (id, data) => send(`/api/tasks/${id}`, 'PUT', data),
+  completeTask: (id) => send(`/api/tasks/${id}/complete`, 'POST'),
+  deleteTask: (id) => send(`/api/tasks/${id}`, 'DELETE'),
 
-  deleteFile: (id) => fetch(`/api/files/${id}`, { method: 'DELETE' }).then(handle),
-  previewFile: (id) => fetch(`/api/files/${id}/preview`).then(handle),
+  deleteFile: (id) => send(`/api/files/${id}`, 'DELETE'),
+  previewFile: (id) => get(`/api/files/${id}/preview`),
 
   // file upload with progress (XHR exposes upload progress, fetch does not)
   uploadFile(taskId, file, onProgress) {
@@ -40,9 +84,11 @@ export const api = {
       const form = new FormData();
       form.append('file', file);
       xhr.open('POST', `/api/tasks/${taskId}/files`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+        else if (xhr.status === 401) { setToken(null); window.dispatchEvent(new Event('taskie:unauthorized')); reject(new Error('Session expired')); }
         else reject(new Error(`Upload failed (${xhr.status})`));
       };
       xhr.onerror = () => reject(new Error('Upload failed (network)'));
@@ -50,12 +96,13 @@ export const api = {
     });
   },
 
-  agentChat: (message) => fetch('/api/agent/chat', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ message }) }).then(handle),
-  agentRecommendations: (apply = false) => fetch(`/api/agent/recommendations${apply ? '?apply=true' : ''}`).then(handle),
-  agentPlan: (horizon = 7, capacity) => fetch(`/api/agent/plan?horizon=${horizon}${capacity ? `&capacity_minutes=${capacity}` : ''}`).then(handle),
-  agentEvaluation: () => fetch('/api/agent/evaluation').then(handle),
-  agentActions: () => fetch('/api/agent/actions').then(handle),
-  agentStatus: () => fetch('/api/agent/status').then(handle),
+  // ---- agent
+  agentChat: (message) => send('/api/agent/chat', 'POST', { message }),
+  agentRecommendations: (apply = false) => get(`/api/agent/recommendations${apply ? '?apply=true' : ''}`),
+  agentPlan: (horizon = 7, capacity, scope = 'mine') => get(`/api/agent/plan?horizon=${horizon}&scope=${scope}${capacity ? `&capacity_minutes=${capacity}` : ''}`),
+  agentEvaluation: (scope = 'mine') => get(`/api/agent/evaluation?scope=${scope}`),
+  agentActions: () => get('/api/agent/actions'),
+  agentStatus: () => get('/api/agent/status'),
 };
 
 export const STATUS_LABELS = {
@@ -76,4 +123,9 @@ export function fmtBytes(n) {
 export function fmtDate(iso) {
   if (!iso) return '';
   return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export function initials(user) {
+  const src = user?.full_name || user?.username || '?';
+  return src.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 }

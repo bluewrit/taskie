@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { api, STATUS_LABELS, fmtDate } from '../api.js';
+import Avatar from './Avatar.jsx';
 
 export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew, notify }) {
   const [query, setQuery] = useState('');
@@ -7,13 +8,13 @@ export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew
   const [sort, setSort] = useState('score');
 
   const rows = useMemo(() => {
-    let out = tasks.filter((t) =>
+    const out = tasks.filter((t) =>
       (!status || t.status === status) &&
       (!query || t.title.toLowerCase().includes(query.toLowerCase()) ||
         (t.description || '').toLowerCase().includes(query.toLowerCase())));
     const by = {
       score: (a, b) => b.agent_score - a.agent_score,
-      due: (a, b) => (a.due_date || '9999') .localeCompare(b.due_date || '9999'),
+      due: (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'),
       created: (a, b) => b.created_at.localeCompare(a.created_at),
       title: (a, b) => a.title.localeCompare(b.title),
     };
@@ -58,7 +59,7 @@ export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew
       <table className="table">
         <thead>
           <tr>
-            <th></th><th>Task</th><th>Project</th><th>Status</th><th>Priority</th>
+            <th></th><th>Task</th><th>Assignee</th><th>Project</th><th>Status</th><th>Priority</th>
             <th>Due</th><th>Progress</th><th>Score</th><th>Files</th>
           </tr>
         </thead>
@@ -72,6 +73,12 @@ export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew
                   <span className={`checkbox ${t.status === 'done' ? 'checked' : ''}`}>✓</span>
                 </td>
                 <td className="td-title">{t.title}</td>
+                <td>
+                  <span className="assignee-cell">
+                    <Avatar user={t.assignee} size={22} />
+                    <span className="assignee-name">{t.assignee ? (t.assignee.full_name || t.assignee.username) : <span className="muted">Unassigned</span>}</span>
+                  </span>
+                </td>
                 <td>{p ? <><span className="dot" style={{ background: p.color }} /> {p.name}</> : <span className="muted">—</span>}</td>
                 <td><span className={`status-chip st-${t.status}`}>{STATUS_LABELS[t.status]}</span></td>
                 <td><span className={`pill pill-${t.priority}`}>{t.priority}</span></td>
@@ -85,7 +92,7 @@ export default function TaskList({ tasks, projects, onChanged, onOpenTask, onNew
             );
           })}
           {rows.length === 0 && (
-            <tr><td colSpan={9} className="muted empty-row">No tasks match. Try clearing filters or create one.</td></tr>
+            <tr><td colSpan={10} className="muted empty-row">No tasks match. Try clearing filters or create one.</td></tr>
           )}
         </tbody>
       </table>
