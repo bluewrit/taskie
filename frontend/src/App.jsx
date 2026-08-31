@@ -14,6 +14,7 @@ import Recommendations from './components/Recommendations.jsx';
 import Planner from './components/Planner.jsx';
 import Evaluation from './components/Evaluation.jsx';
 import Team from './components/Team.jsx';
+import ProjectHub from './components/ProjectHub.jsx';
 
 export default function App() {
   const [me, setMe] = useState(null);
@@ -24,6 +25,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [projectFilter, setProjectFilter] = useState('');
+  const [hubProject, setHubProject] = useState(null); // project shown in the hub view
   const [assigneeFilter, setAssigneeFilter] = useState(''); // '' | 'me' | 'unassigned' | userId
   const [modalTask, setModalTask] = useState(null); // null | 'new' | task object
   const [previewFileId, setPreviewFileId] = useState(null);
@@ -96,6 +98,11 @@ export default function App() {
                     onNew={() => setModalTask('new')} notify={notify} onChanged={onTasksChanged} />,
     team: <Team users={users} tasks={tasks} me={me} onOpenTask={setModalTask}
                 onChanged={onTasksChanged} notify={notify} onNavigate={setView} />,
+    project: hubProject ? (
+      <ProjectHub project={hubProject} tasks={tasks} me={me}
+                  onPreview={setPreviewFileId} notify={notify}
+                  onViewTasks={() => { setProjectFilter(String(hubProject.id)); setView('list'); }} />
+    ) : <div className="view"><p className="muted">Pick a project from the sidebar.</p></div>,
     recommendations: <Recommendations onTasksChanged={onTasksChanged} notify={notify} />,
     planner: <Planner me={me} />,
     evaluation: <Evaluation me={me} />,
@@ -111,6 +118,8 @@ export default function App() {
                projectFilter={projectFilter} setProjectFilter={setProjectFilter}
                assigneeFilter={assigneeFilter} setAssigneeFilter={setAssigneeFilter}
                onNewTask={() => setModalTask('new')}
+               onOpenProject={(p) => { setHubProject(p); setView('project'); }}
+               hubProjectId={hubProject?.id}
                taskCount={tasks.filter((t) => t.status !== 'done').length} />
       <div className="main-wrap">
         <Topbar me={me} onLogout={logout} />

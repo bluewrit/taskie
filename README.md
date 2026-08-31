@@ -28,6 +28,9 @@ A full-stack task management system with **file upload & preview for every file 
 ### 🗂 Task management
 - Projects + tasks with status (to do / in progress / blocked / done), priority, due dates,
   estimates, progress, and tags
+- **Project hubs**: every project has a **shared file library** (project-level uploads +
+  every file from its tasks, with uploader and source task) and a **shared team chat**
+  (live-updating, avatar-tagged, works across teammates)
 - Kanban board with drag & drop, sortable/filterable list view, dashboard overview
 - Every task carries an **agent priority score** (0–100) computed from due-date pressure,
   priority, momentum, and estimate size
@@ -92,5 +95,5 @@ cd backend && .venv/bin/python -m pytest tests/ -q
 |---|---|
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2 (SQLite), python-docx / openpyxl / python-pptx / pypdf |
 | Frontend | React 18, Vite 5, hand-rolled SVG charts, zero UI framework |
-| Auth | PBKDF2-SHA256 password hashing (stdlib), bearer-token sessions, per-endpoint enforcement |
+| Auth | PBKDF2-SHA256 hashing; triple-channel sessions (bearer header → cookie → ?token= query param, so it survives header-stripping proxies and cookie-blocking iframes) |
 | AI | Deterministic agent engine (NLU + tool-calling loop) with optional OpenAI-compatible LLM |

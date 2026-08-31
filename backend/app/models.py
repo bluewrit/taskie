@@ -94,8 +94,13 @@ class FileAttachment(Base):
     __tablename__ = "file_attachments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    task_id: Mapped[int] = mapped_column(
-        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    # A file belongs either to a task (task_id) or is shared at project
+    # level (project_id) — exactly one of the two is set.
+    task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
     filename: Mapped[str] = mapped_column(String(300), nullable=False)
     stored_name: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -103,8 +108,29 @@ class FileAttachment(Base):
     extension: Mapped[str] = mapped_column(String(20), default="")
     size: Mapped[int] = mapped_column(Integer, default=0)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    uploaded_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
-    task: Mapped[Task] = relationship(back_populates="files")
+    task: Mapped[Task | None] = relationship(back_populates="files")
+
+
+class ProjectMessage(Base):
+    """Shared chat inside a project — visible to every teammate."""
+
+    __tablename__ = "project_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    user: Mapped[User | None] = relationship()
 
 
 class AgentAction(Base):

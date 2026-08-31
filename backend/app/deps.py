@@ -11,16 +11,22 @@ COOKIE_NAME = "taskie_token"
 
 
 def extract_token(request: Request, authorization: str | None) -> str | None:
-    """Session token from the Authorization header or the session cookie.
+    """Session token from any of three channels, in order of preference:
 
-    The cookie is the primary channel for the browser: some preview proxies
-    strip Authorization headers, but cookies always survive (same-origin).
+    1. Authorization: Bearer header (API/CLI use)
+    2. taskie_token cookie (normal browser sessions)
+    3. ?token= query param — the only channel guaranteed to survive the
+       sandbox preview environment, where proxies strip Authorization
+       headers and cross-site iframes block cookie delivery.
     """
     if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ").strip()
         if token:
             return token
-    return request.cookies.get(COOKIE_NAME)
+    cookie = request.cookies.get(COOKIE_NAME)
+    if cookie:
+        return cookie
+    return request.query_params.get("token") or None
 
 
 def get_current_user(

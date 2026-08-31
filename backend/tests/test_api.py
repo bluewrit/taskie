@@ -369,6 +369,68 @@ def test_cookie_only_auth_survives_header_stripping_proxy():
     assert anon.get("/api/tasks").status_code == 401
 
 
+def test_token_query_param_auth():
+    """?token= works when headers AND cookies are stripped (preview proxy)."""
+    anon = TestClient(app)
+    r = anon.post("/api/auth/login", json={"username": "demo", "password": "taskie123"})
+    token = r.json()["token"]
+    # simulate proxy: drop cookies and headers, keep only the query param
+    anon.cookies.clear()
+    anon.headers.pop("Authorization", None)
+    assert anon.get("/api/tasks", params={"token": token}).status_code == 200
+    assert anon.get("/api/agent/recommendations", params={"token": token}).status_code == 200
+    assert anon.get("/api/tasks").status_code == 401  # without it: rejected
+
+
+def test_project_shared_files():
+    proj = client.post("/api/projects", json={"name": "HubProj", "color": "#10b981"}).json()
+    task = _create_task("Hub task", project_id=proj["id"])
+    tf = client.post(f"/api/tasks/{task['id']}/files",
+                     files={"file": ("task-notes.md", b"# notes", "text/markdown")}).json()
+
+    sf = client.post(f"/api/projects/{proj['id']}/files",
+                     files={"file": ("brief.pdf", b"%PDF-1.4 fake", "application/pdf")})
+    assert sf.status_code == 201
+    assert sf.json()["task_id"] is None
+    assert sf.json()["uploaded_by_name"]
+
+    listing = client.get(f"/api/projects/{proj['id']}/files").json()
+    names = {f["filename"] for f in listing}
+    assert names == {"task-notes.md", "brief.pdf"}
+    shared = next(f for f in listing if f["filename"] == "brief.pdf")
+    assert shared["task_title"] is None
+    from_task = next(f for f in listing if f["filename"] == "task-notes.md")
+    assert from_task["task_title"] == "Hub task"
+
+    # another project must not see these files
+    other = client.post("/api/projects", json={"name": "OtherProj"}).json()
+    assert client.get(f"/api/projects/{other['id']}/files").json() == []
+
+    assert client.delete(f"/api/files/{sf.json()['id']}").status_code == 204
+    assert len(client.get(f"/api/projects/{proj['id']}/files").json()) == 1
+
+
+def test_project_chat():
+    proj = client.post("/api/projects", json={"name": "ChatProj"}).json()
+    assert client.get(f"/api/projects/{proj['id']}/messages").json() == []
+
+    m1 = client.post(f"/api/projects/{proj['id']}/messages", json={"body": "hello team"})
+    assert m1.status_code == 201
+    assert m1.json()["body"] == "hello team"
+    assert m1.json()["user"]["username"] == "tester"
+
+    client.post(f"/api/projects/{proj['id']}/messages", json={"body": "second message"})
+    msgs = client.get(f"/api/projects/{proj['id']}/messages").json()
+    assert [m["body"] for m in msgs] == ["hello team", "second message"]
+
+    # incremental fetch with cursor
+    tail = client.get(f"/api/projects/{proj['id']}/messages", params={"after": m1.json()["id"]}).json()
+    assert [m["body"] for m in tail] == ["second message"]
+
+    # validation
+    assert client.post(f"/api/projects/{proj['id']}/messages", json={"body": ""}).status_code == 422
+
+
 def test_evaluation_scope_mine_vs_all():
     mine = client.get("/api/agent/evaluation", params={"scope": "mine"}).json()
     everything = client.get("/api/agent/evaluation", params={"scope": "all"}).json()

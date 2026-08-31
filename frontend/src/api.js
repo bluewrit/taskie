@@ -18,13 +18,19 @@ export function mediaUrl(url) {
   return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
 }
 
+// Auth travels on THREE channels simultaneously because the sandbox preview
+// is hostile to the standard ones: the proxy strips Authorization headers
+// and cross-site iframes block cookie delivery. The ?token= query param
+// always survives, so it is always appended when we hold a token.
+function withToken(url) {
+  if (!token) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+}
+
 function authHeaders(extra) {
   return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };
 }
 
-// `credentials: 'same-origin'` sends the session cookie. The cookie is the
-// primary auth channel in the browser because some preview proxies strip
-// Authorization headers; the bearer token is kept as a fallback.
 async function handle(res) {
   if (!res.ok) {
     let detail = res.statusText;
@@ -42,8 +48,8 @@ async function handle(res) {
   return res.json();
 }
 
-const get = (url) => fetch(url, { headers: authHeaders(), credentials: 'same-origin' }).then(handle);
-const send = (url, method, data) => fetch(url, {
+const get = (url) => fetch(withToken(url), { headers: authHeaders(), credentials: 'same-origin' }).then(handle);
+const send = (url, method, data) => fetch(withToken(url), {
   method,
   credentials: 'same-origin',
   headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -69,6 +75,27 @@ export const api = {
   createProject: (data) => send('/api/projects', 'POST', data),
   deleteProject: (id) => send(`/api/projects/${id}`, 'DELETE'),
 
+  // ---- project hub (shared files + chat)
+  projectFiles: (id) => get(`/api/projects/${id}/files`),
+  uploadProjectFile(projectId, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const form = new FormData();
+      form.append('file', file);
+      xhr.open('POST', withToken(`/api/projects/${projectId}/files`));
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+        else reject(new Error(`Upload failed (${xhr.status})`));
+      };
+      xhr.onerror = () => reject(new Error('Upload failed (network)'));
+      xhr.send(form);
+    });
+  },
+  projectMessages: (id, after = 0) => get(`/api/projects/${id}/messages?after=${after}`),
+  postProjectMessage: (id, body) => send(`/api/projects/${id}/messages`, 'POST', { body }),
+
   listTasks: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null && v !== false)).toString();
     return get(`/api/tasks${qs ? `?${qs}` : ''}`);
@@ -87,7 +114,7 @@ export const api = {
       const xhr = new XMLHttpRequest();
       const form = new FormData();
       form.append('file', file);
-      xhr.open('POST', `/api/tasks/${taskId}/files`);
+      xhr.open('POST', withToken(`/api/tasks/${taskId}/files`));
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
       xhr.onload = () => {

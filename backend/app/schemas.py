@@ -102,6 +102,24 @@ class TaskOut(TaskIn):
     files: list[FileOut] = []
 
 
+# ---------------------------------------------------------------- Project hub
+class ProjectFileOut(FileOut):
+    task_id: int | None = None
+    task_title: str | None = None
+    uploaded_by_name: str | None = None
+
+
+class MessageIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class MessageOut(BaseModel):
+    id: int
+    body: str
+    created_at: datetime
+    user: UserOut | None = None
+
+
 # ---------------------------------------------------------------- Agent
 class ChatMessage(BaseModel):
     message: str = Field(min_length=1, max_length=2000)

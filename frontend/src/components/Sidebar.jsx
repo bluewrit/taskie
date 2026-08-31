@@ -16,7 +16,7 @@ const NAV = [
 export default function Sidebar({
   view, setView, projects, users, me,
   projectFilter, setProjectFilter, assigneeFilter, setAssigneeFilter,
-  onNewTask, taskCount,
+  onNewTask, onOpenProject, hubProjectId, taskCount,
 }) {
   return (
     <aside className="sidebar">
@@ -61,10 +61,15 @@ export default function Sidebar({
       <div className="sidebar-section">
         <div className="sidebar-label">Projects</div>
         {projects.map((p) => (
-          <button key={p.id} className={`filter-item ${String(projectFilter) === String(p.id) ? 'active' : ''}`}
-                  onClick={() => setProjectFilter(String(projectFilter) === String(p.id) ? '' : p.id)}>
-            <span className="dot" style={{ background: p.color }} /> {p.name}
-          </button>
+          <div key={p.id} className="project-item">
+            <button className={`filter-item ${view === 'project' && hubProjectId === p.id ? 'active' : ''}`}
+                    onClick={() => onOpenProject(p)} title="Open project hub (shared files & chat)">
+              <span className="dot" style={{ background: p.color }} /> {p.name}
+            </button>
+            <button className={`filter-dot-btn ${String(projectFilter) === String(p.id) ? 'active' : ''}`}
+                    title="Filter tasks by this project"
+                    onClick={() => setProjectFilter(String(projectFilter) === String(p.id) ? '' : p.id)}>⌖</button>
+          </div>
         ))}
         {projects.length === 0 && <div className="muted small" style={{ padding: '2px 12px' }}>No projects yet</div>}
       </div>

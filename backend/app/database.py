@@ -43,6 +43,23 @@ def _migrate():
                 conn.execute(text(
                     "ALTER TABLE tasks ADD COLUMN assignee_id INTEGER REFERENCES users(id)"
                 ))
+    if "file_attachments" in inspector.get_table_names():
+        columns = {c["name"] for c in inspector.get_columns("file_attachments")}
+        if "project_id" not in columns:
+            # SQLite can't drop the old NOT NULL on task_id, so rebuild the
+            # table with the new schema and copy rows across.
+            from .models import FileAttachment  # noqa: F401  (ensure mapper)
+
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE file_attachments RENAME TO _file_attachments_old"))
+                Base.metadata.tables["file_attachments"].create(conn)
+                conn.execute(text(
+                    "INSERT INTO file_attachments "
+                    "(id, task_id, project_id, filename, stored_name, mime_type, extension, size, uploaded_at, uploaded_by) "
+                    "SELECT id, task_id, NULL, filename, stored_name, mime_type, extension, size, uploaded_at, NULL "
+                    "FROM _file_attachments_old"
+                ))
+                conn.execute(text("DROP TABLE _file_attachments_old"))
 
 
 def init_db():

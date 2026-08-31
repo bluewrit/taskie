@@ -274,8 +274,40 @@ def seed(force: bool = False):
                 db.add(FileAttachment(task_id=task.id, filename=fname, stored_name=stored,
                                       mime_type=mime, extension=ext, size=len(data)))
         db.commit()
+
+        # seed shared project chats
+        from .models import ProjectMessage
+        if db.query(ProjectMessage).count() == 0:
+            now = datetime.utcnow()
+            messages = [
+                (p1, demo, "Kickoff: launch checklist is live — grab your items!", now - timedelta(hours=5)),
+                (p1, ava, "Blog post draft is 80% there. Cover image pending.", now - timedelta(hours=4)),
+                (p1, ben, "Upload timeout fix needs a reviewer — who's free today?", now - timedelta(hours=2)),
+                (p2, ava, "Analytics events are firing; dashboard link in the shared files.", now - timedelta(hours=6)),
+                (p2, demo, "Newsletter went out — 41% open rate 🎉", now - timedelta(hours=3)),
+                (p3, ben, "CI migration branch is up. Pipeline down to 6min already.", now - timedelta(hours=7)),
+                (p3, demo, "Agent scoring review is blocked on usage data — @Ava can you export it?", now - timedelta(hours=1)),
+            ]
+            for proj, user, body, ts in messages:
+                db.add(ProjectMessage(project_id=proj.id, user_id=user.id if user else None,
+                                      body=body, created_at=ts))
+
+            # a couple of project-level shared files
+            plan = [(p2, "metrics.csv"), (p3, "deploy.py")]
+            by_name = {name: (builder, mime) for name, builder, mime in SAMPLE_FILES}
+            for proj, fname in plan:
+                builder, mime = by_name[fname]
+                data = builder()
+                stored = f"seed-proj-{proj.id}-{fname}"
+                (UPLOAD_DIR / stored).write_bytes(data)
+                db.add(FileAttachment(task_id=None, project_id=proj.id, filename=fname,
+                                      stored_name=stored, mime_type=mime,
+                                      extension="." + fname.rsplit(".", 1)[-1], size=len(data),
+                                      uploaded_by=demo.id if demo else None))
+            db.commit()
+
         print(f"Seeded {db.query(Task).count()} tasks, {db.query(FileAttachment).count()} files, "
-              f"{db.query(Project).count()} projects.")
+              f"{db.query(ProjectMessage).count()} messages, {db.query(Project).count()} projects.")
     finally:
         db.close()
 

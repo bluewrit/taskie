@@ -1,13 +1,23 @@
 """Task and project CRUD endpoints (authenticated, assignment-aware)."""
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
-from ..database import get_db
+from .. import models
+from ..database import UPLOAD_DIR, get_db
 from ..deps import get_current_user
-from ..models import Project, Task, User
-from ..schemas import ProjectIn, ProjectOut, TaskIn, TaskOut, TaskUpdate
+from ..models import FileAttachment, Project, ProjectMessage, Task, User
+from ..schemas import (
+    MessageIn,
+    MessageOut,
+    ProjectFileOut,
+    ProjectIn,
+    ProjectOut,
+    TaskIn,
+    TaskOut,
+    TaskUpdate,
+)
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -51,6 +61,97 @@ def delete_project(project_id: int, db: Session = Depends(get_db),
         raise HTTPException(404, "Project not found")
     db.delete(project)
     db.commit()
+
+
+# ------------------------------------------------------------------ project hub
+def _get_project(db: Session, project_id: int) -> Project:
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    return project
+
+
+@router.get("/projects/{project_id}/files", response_model=list[ProjectFileOut])
+def project_files(project_id: int, db: Session = Depends(get_db),
+                  _: User = Depends(get_current_user)):
+    """Shared files of a project: project-level uploads + every file
+    attached to its tasks."""
+    from sqlalchemy import or_
+
+    _get_project(db, project_id)
+    task_ids = [t.id for t in db.query(Task.id).filter(Task.project_id == project_id).all()]
+    conditions = [FileAttachment.project_id == project_id]
+    if task_ids:
+        conditions.append(FileAttachment.task_id.in_(task_ids))
+    query = (db.query(FileAttachment)
+             .options(joinedload(FileAttachment.task))
+             .filter(or_(*conditions)))
+    out = []
+    for f in query.order_by(FileAttachment.uploaded_at.desc(), FileAttachment.id.desc()).all():
+        uploader = db.get(User, f.uploaded_by) if f.uploaded_by else None
+        out.append(ProjectFileOut(
+            id=f.id, filename=f.filename, mime_type=f.mime_type, extension=f.extension,
+            size=f.size, uploaded_at=f.uploaded_at,
+            task_id=f.task_id, task_title=f.task.title if f.task else None,
+            uploaded_by_name=(uploader.full_name or uploader.username) if uploader else None,
+        ))
+    return out
+
+
+@router.post("/projects/{project_id}/files", response_model=ProjectFileOut, status_code=201)
+async def upload_project_file(project_id: int, file: UploadFile,
+                              db: Session = Depends(get_db),
+                              current: User = Depends(get_current_user)):
+    """Upload a file shared with the whole project (not tied to a task)."""
+    import uuid
+    from pathlib import Path as _P
+
+    _get_project(db, project_id)
+    content = await file.read()
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(413, "File exceeds the 100 MB limit")
+    if not content:
+        raise HTTPException(422, "Empty file")
+    filename = _P(file.filename or "upload.bin").name
+    ext = _P(filename).suffix.lower()[:20]
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    (UPLOAD_DIR / stored_name).write_bytes(content)
+    att = FileAttachment(
+        task_id=None, project_id=project_id, filename=filename, stored_name=stored_name,
+        mime_type=file.content_type or "application/octet-stream",
+        extension=ext, size=len(content), uploaded_by=current.id,
+    )
+    db.add(att)
+    db.commit()
+    db.refresh(att)
+    return ProjectFileOut(
+        id=att.id, filename=att.filename, mime_type=att.mime_type, extension=att.extension,
+        size=att.size, uploaded_at=att.uploaded_at,
+        uploaded_by_name=current.full_name or current.username,
+    )
+
+
+@router.get("/projects/{project_id}/messages", response_model=list[MessageOut])
+def project_messages(project_id: int, after: int = 0, db: Session = Depends(get_db),
+                     _: User = Depends(get_current_user)):
+    _get_project(db, project_id)
+    query = (db.query(ProjectMessage)
+             .options(joinedload(ProjectMessage.user))
+             .filter(ProjectMessage.project_id == project_id, ProjectMessage.id > after)
+             .order_by(ProjectMessage.id))
+    return query.all()
+
+
+@router.post("/projects/{project_id}/messages", response_model=MessageOut, status_code=201)
+def post_project_message(project_id: int, payload: MessageIn,
+                         db: Session = Depends(get_db),
+                         current: User = Depends(get_current_user)):
+    _get_project(db, project_id)
+    msg = ProjectMessage(project_id=project_id, user_id=current.id, body=payload.body.strip()[:4000])
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg
 
 
 # ------------------------------------------------------------------ tasks
